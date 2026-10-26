@@ -89,30 +89,32 @@ Content-Type: application/json
 
 然后 `ocr_provider = glm`，`ocr_api_key = 你的 key`，`ocr_api_base` 留空即可。
 
-**DeepSeek-OCR（自己用 vLLM 起服务）**
+**DeepSeek-OCR（调 PPIO 的 API，或自己起 vLLM）**
 
-官方已支持 upstream vLLM（≥ 0.11.1），起个 OpenAI 兼容 server 就行：
+推荐直接调 PPIO 的 OpenAI 兼容接口：
 
-```bash
-vllm serve deepseek-ai/DeepSeek-OCR --trust-remote-code
+```python
+base_url = "https://api.ppio.com/openai"
+model    = "deepseek/deepseek-ocr"
 ```
 
-然后 `ocr_provider = deepseek`，`ocr_api_base = http://127.0.0.1:8000/v1`。
+插件里对应：`ocr_provider = deepseek`、`ocr_api_base = https://api.ppio.com/openai`、`ocr_model = deepseek/deepseek-ocr`、`ocr_api_key = 你的 key`（PPIO 走 `Authorization: Bearer`）。
 
-提示词必须带 `<|grounding|>` 才会吐坐标：
+提示词带 `<|grounding|>` 才会返回坐标；PPIO 版不需要 `<image>` 前缀：
 
 ```
-<image>
 <|grounding|>OCR this image.
 ```
 
-它返回的格式长这样，插件按 `<|ref|>` / `<|det|>` 拆：
+返回是一串标记，插件按 `<|ref|>` / `<|det|>` 配对拆：
 
 ```
-<|ref|>标题<|/ref|><|det|>[[10, 20, 300, 60]]<|/det|>
+<|ref|>BaseURL:<|/ref|><|det|>[[34, 105, 227, 209]]<|/det|>
 ```
 
-请求里带 `skip_special_tokens: false`，否则这些标记会被过滤掉、只剩纯文字。
+坐标是**原图像素**，不是归一化，插件会自动识别。
+
+自己用 vLLM 起也行：`vllm serve deepseek-ai/DeepSeek-OCR --trust-remote-code`，base 填 `http://127.0.0.1:8000/v1`、模型填 `deepseek-ai/DeepSeek-OCR`，提示词可能要补回 `<image>` 前缀。
 
 > 三家返回结构差很多，插件统一做了兼容：递归找「带文本 + 带坐标」的节点（`position` / `bbox_2d` / `bbox` / `<|ref|><|det|>` 标记都认），坐标是 0~1 归一化还是像素会自动判断。
 
