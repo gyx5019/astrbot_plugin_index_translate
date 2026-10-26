@@ -1,0 +1,11 @@
+# astrbot_plugin_index_translate 依赖
+#
+# 其实只用得到这两个，AstrBot 本体已经自带，正常环境不用额外装。
+# 写在这里是为了：别的环境缺了能一把补齐；已装过的 pip 会自动跳过，不会冲突。
+httpx>=0.27
+Pillow>=10
+
+# 系统依赖（pip 装不了，需自行 apt/brew 安装）：
+#   ffmpeg  —— 语音/音频翻译时用 ffprobe 读时长，判断是否超过上限
+#   Debian/Ubuntu: apt install -y ffmpeg
+#   macOS:         brew install ffmpeg
