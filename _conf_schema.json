@@ -97,6 +97,22 @@
     "default": "",
     "hint": "选 glm 时填智谱的 key；cnocr 自建服务不用填"
   },
+  "asr_api_base": {
+    "type": "string",
+    "description": "语音转文字的接口地址（OpenAI 兼容，如阿里云 MaaS 的 .../compatible-mode/v1）",
+    "default": "",
+    "hint": "留空则退回用 AstrBot 里配的 STT provider；注意 openai_whisper_api 那种走 /audio/transcriptions 的，在 Qwen 网关上是不通的"
+  },
+  "asr_api_key": {
+    "type": "string",
+    "description": "语音转文字的 API Key",
+    "default": ""
+  },
+  "asr_model": {
+    "type": "string",
+    "description": "语音转文字的模型名",
+    "default": "qwen3-asr-flash"
+  },
   "voice_translate": {
     "type": "bool",
     "description": "语音翻译：引用语音后发「翻译」，把语音转成文字再翻",
