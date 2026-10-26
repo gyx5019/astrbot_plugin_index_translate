@@ -284,7 +284,10 @@ class IndexTranslatePlugin(Star):
         if provider in ("glm", "bigmodel", "zhipu"):
             return bool(str(self.config.get("ocr_api_key") or "").strip())
         if provider in ("deepseek", "deepseek-ocr", "ds"):
-            return bool(str(self.config.get("ocr_api_base") or "").strip())
+            base = str(self.config.get("ocr_api_base") or "").strip()
+            if base.startswith(("http://127.", "http://localhost", "http://192.168.", "http://10.")):
+                return True
+            return bool(str(self.config.get("ocr_api_key") or "").strip())
         return bool(str(self.config.get("ocr_api_base") or "").strip())
 
     async def _ocr(self, image_path: str) -> list[dict]:
@@ -310,13 +313,23 @@ class IndexTranslatePlugin(Star):
             if r.status_code != 200:
                 raise RuntimeError(f"GLM-OCR HTTP {r.status_code}：{r.text[:200]}")
         elif provider in ("deepseek", "deepseek-ocr", "ds"):
-            # 自己用 vLLM 起的 DeepSeek-OCR，OpenAI 兼容接口
-            base = str(self.config.get("ocr_api_base") or "http://127.0.0.1:8000/v1").strip().rstrip("/")
-            model = str(self.config.get("ocr_model") or "deepseek-ai/DeepSeek-OCR")
-            prompt = str(self.config.get("ocr_prompt") or "<image>\n<|grounding|>OCR this image.")
-            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            # DeepSeek-OCR：PPIO 的 OpenAI 兼容接口，或自己用 vLLM 起的
+            base = str(
+                self.config.get("ocr_api_base") or "https://api.ppio.com/openai"
+            ).strip().rstrip("/")
+            model = str(self.config.get("ocr_model") or "deepseek/deepseek-ocr")
+            prompt = str(self.config.get("ocr_prompt") or "<|grounding|>OCR this image.")
+            key = str(self.config.get("ocr_api_key") or "").strip()
+            headers = {"Content-Type": "application/json"}
+            if key:
+                headers["Authorization"] = f"Bearer {key}"
+            is_remote = not base.startswith(
+                ("http://127.", "http://localhost", "http://192.168.", "http://10.", "http://172.")
+            )
+            async with httpx.AsyncClient(timeout=timeout, trust_env=is_remote) as client:
                 r = await client.post(
                     f"{base}/chat/completions",
+                    headers=headers,
                     json={
                         "model": model,
                         "messages": [
@@ -330,8 +343,6 @@ class IndexTranslatePlugin(Star):
                         ],
                         "temperature": 0.0,
                         "max_tokens": 4096,
-                        # 关掉特殊 token 过滤，不然 <|ref|>/<|det|> 会被吃掉
-                        "skip_special_tokens": False,
                     },
                 )
             if r.status_code != 200:
