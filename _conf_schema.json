@@ -4,9 +4,31 @@
     "description": "默认目标语言",
     "default": "en",
     "options": [
-      "zh", "en", "ja", "ko", "fr", "de", "es", "pt", "ru", "it",
-      "ar", "hi", "vi", "th", "id", "ms", "fil", "tr", "nl", "pl",
-      "sv", "ukr_cyrl", "fas_arab", "ces_latn", "ell_grek"
+      "zh",
+      "en",
+      "ja",
+      "ko",
+      "fr",
+      "de",
+      "es",
+      "pt",
+      "ru",
+      "it",
+      "ar",
+      "hi",
+      "vi",
+      "th",
+      "id",
+      "ms",
+      "fil",
+      "tr",
+      "nl",
+      "pl",
+      "sv",
+      "ukr_cyrl",
+      "fas_arab",
+      "ces_latn",
+      "ell_grek"
     ],
     "hint": "中文=zh，英语=en，日语=ja……也可以在指令里临时指定，如「翻译成日语 xxx」"
   },
@@ -57,32 +79,23 @@
     "type": "string",
     "description": "OCR 用哪家",
     "default": "cnocr",
-    "options": ["cnocr", "glm", "deepseek"],
-    "hint": "cnocr：自己起 CnOCR 的 FastAPI（cnocr serve -p 8501）；glm：智谱 GLM-OCR（需 API Key）；deepseek：自己用 vLLM 起 DeepSeek-OCR 的 OpenAI 兼容服务（地址填到 /v1）"
-  },
-  "ocr_model": {
-    "type": "string",
-    "description": "deepseek 模式下的模型名",
-    "default": "deepseek-ai/DeepSeek-OCR",
-    "hint": "自建 vLLM 用 deepseek-ai/DeepSeek-OCR；走官方接口就填官方模型名"
-  },
-  "ocr_prompt": {
-    "type": "string",
-    "description": "deepseek 模式下的提示词",
-    "default": "<|grounding|>OCR this image.",
-    "hint": "带 <|grounding|> 才会返回文字坐标（<|ref|>…<|det|>）"
+    "options": [
+      "cnocr",
+      "glm"
+    ],
+    "hint": "cnocr：自己起 CnOCR 的 FastAPI（cnocr serve -p 8501）；glm：智谱 GLM-OCR（需 API Key）"
   },
   "ocr_api_base": {
     "type": "string",
     "description": "OCR 服务地址",
     "default": "",
-    "hint": "cnocr 例：http://127.0.0.1:8501；glm 留空用 https://open.bigmodel.cn/api/paas/v4；deepseek 留空用 https://api.deepseek.com（也可填自建 vLLM 地址，如 http://127.0.0.1:8000/v1）"
+    "hint": "cnocr 例：http://127.0.0.1:8501；glm 留空用 https://open.bigmodel.cn/api/paas/v4"
   },
   "ocr_api_key": {
     "type": "string",
-    "description": "OCR 服务的 API Key（glm / deepseek 共用这一栏）",
+    "description": "OCR 服务的 API Key（选 glm 时填）",
     "default": "",
-    "hint": "选 glm 填智谱的 key；选 deepseek 填 DeepSeek 官方或自建中转的 key；cnocr 自建服务不用填"
+    "hint": "选 glm 时填智谱的 key；cnocr 自建服务不用填"
   },
   "ocr_api_path": {
     "type": "string",
