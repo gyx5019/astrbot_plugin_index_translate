@@ -97,6 +97,21 @@
     "default": "",
     "hint": "选 glm 时填智谱的 key；cnocr 自建服务不用填"
   },
+  "voice_translate": {
+    "type": "bool",
+    "description": "语音翻译：引用语音后发「翻译」，把语音转成文字再翻",
+    "default": true
+  },
+  "voice_auto": {
+    "type": "bool",
+    "description": "直接发语音就自动翻译（不用配「翻译」两字）",
+    "default": false
+  },
+  "voice_reply": {
+    "type": "bool",
+    "description": "译文用 TTS 语音回一遍",
+    "default": true
+  },
   "ocr_api_path": {
     "type": "string",
     "description": "cnocr 的接口路径",
