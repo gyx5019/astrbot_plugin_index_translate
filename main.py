@@ -315,7 +315,7 @@ class IndexTranslatePlugin(Star):
         elif provider in ("deepseek", "deepseek-ocr", "ds"):
             # DeepSeek-OCR：PPIO 的 OpenAI 兼容接口，或自己用 vLLM 起的
             base = str(
-                self.config.get("ocr_api_base") or "https://api.ppio.com/openai"
+                self.config.get("ocr_api_base") or "https://api.deepseek.com"
             ).strip().rstrip("/")
             model = str(self.config.get("ocr_model") or "deepseek/deepseek-ocr")
             prompt = str(self.config.get("ocr_prompt") or "<|grounding|>OCR this image.")
