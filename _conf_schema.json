@@ -63,13 +63,14 @@
   "ocr_model": {
     "type": "string",
     "description": "deepseek 模式下的模型名",
-    "default": "deepseek-ai/DeepSeek-OCR"
+    "default": "deepseek/deepseek-ocr",
+    "hint": "走 PPIO 就填 deepseek/deepseek-ocr；自己用 vLLM 起就填 deepseek-ai/DeepSeek-OCR"
   },
   "ocr_prompt": {
     "type": "string",
     "description": "deepseek 模式下的提示词",
-    "default": "<image>\n<|grounding|>OCR this image.",
-    "hint": "带 <|grounding|> 才会返回文字坐标（<|ref|>…<|det|>），不带就只回纯文本"
+    "default": "<|grounding|>OCR this image.",
+    "hint": "带 <|grounding|> 才会返回文字坐标（<|ref|>…<|det|>）；PPIO 不需要 <image> 前缀，vLLM 自建可能要加"
   },
   "ocr_api_base": {
     "type": "string",
