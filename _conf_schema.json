@@ -57,8 +57,19 @@
     "type": "string",
     "description": "OCR 用哪家",
     "default": "cnocr",
-    "options": ["cnocr", "glm"],
-    "hint": "cnocr：自己起 CnOCR 的 FastAPI（cnocr serve -p 8501）；glm：智谱 GLM-OCR，走 https://open.bigmodel.cn/api/paas/v4/layout_parsing，需要 API Key"
+    "options": ["cnocr", "glm", "deepseek"],
+    "hint": "cnocr：自己起 CnOCR 的 FastAPI（cnocr serve -p 8501）；glm：智谱 GLM-OCR（需 API Key）；deepseek：自己用 vLLM 起 DeepSeek-OCR 的 OpenAI 兼容服务（地址填到 /v1）"
+  },
+  "ocr_model": {
+    "type": "string",
+    "description": "deepseek 模式下的模型名",
+    "default": "deepseek-ai/DeepSeek-OCR"
+  },
+  "ocr_prompt": {
+    "type": "string",
+    "description": "deepseek 模式下的提示词",
+    "default": "<image>\n<|grounding|>OCR this image.",
+    "hint": "带 <|grounding|> 才会返回文字坐标（<|ref|>…<|det|>），不带就只回纯文本"
   },
   "ocr_api_base": {
     "type": "string",
