@@ -45,7 +45,9 @@
 | `api_base` | string | `https://index-translate.bilibili.com/v1` | API 地址，自建可改 |
 | `show_usage` | bool | `false` | 是否在结果后附耗时/用量 |
 | `image_render` | bool | `false` | 图片翻译是否输出「回填译文的图」 |
-| `ocr_provider` | string | `cnocr` | OCR 用哪家：`cnocr` / `glm` |
+| `ocr_provider` | string | `cnocr` | OCR 用哪家：`cnocr` / `glm` / `deepseek` |
+| `ocr_model` | string | `deepseek-flash` | `deepseek` 模式的模型名 |
+| `ocr_prompt` | string | `请逐行识别图片中的所有文字，原样输出，不要翻译、不要解释、不要加任何说明。` | `deepseek` 模式的提示词 |
 | `ocr_api_base` | string | 空 | cnocr 填服务地址；glm 留空则用官方地址 |
 | `ocr_api_key` | string | 空 | 选 `glm` 时必填 |
 | `ocr_api_path` | string | `/ocr` | cnocr 的接口路径 |
@@ -64,7 +66,7 @@
 
 任何一步失败都会自动退回文字输出，不会丢图。
 
-两种 OCR 二选一：
+三种 OCR 选一种：
 
 **CnOCR（自己起服务）**
 
@@ -87,7 +89,20 @@ Content-Type: application/json
 
 然后 `ocr_provider = glm`，`ocr_api_key = 你的 key`，`ocr_api_base` 留空即可。
 
-> 两家返回结构差很多，插件统一做了兼容：递归找「带文本 + 带坐标」的节点（`position` / `bbox_2d` / `bbox` / `<|ref|><|det|>` 标记都认），坐标是 0~1 归一化还是像素会自动判断。
+**DeepSeek 官方视觉接口（deepseek-flash）**
+
+官方没有单独的 OCR 模型，能吃图的是 `deepseek-flash`（`deepseek-v4-pro` 不吃图），所以这里拿它当 OCR 用：
+
+```python
+base_url = "https://api.deepseek.com"
+model    = "deepseek-flash"
+```
+
+插件里 `ocr_provider = deepseek`、`ocr_api_base` 留空（默认官方地址）、`ocr_api_key` 填 DeepSeek 官方 key。
+
+它只返回文字、**不返回坐标**，所以没法回填成图，插件会自动走「识别 → 翻译」，直接给你译文文字。想要回填出图，用 `glm` 或 `cnocr`。
+
+> 注意：只有 `glm` 和 `cnocr` 会返回坐标、能回填；`deepseek` 官方接口只给文字。这两家的返回结构差很多，插件统一做了兼容：递归找「带文本 + 带坐标」的节点（`position` / `bbox_2d` / `bbox` 都认），坐标是 0~1 归一化还是像素会自动判断。
 
 ## 原理
 
