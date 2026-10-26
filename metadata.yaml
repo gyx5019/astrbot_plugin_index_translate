@@ -1,0 +1,22 @@
+name: astrbot_plugin_index_translate
+display_name: "B站 Index-Translate 翻译"
+short_desc: 调 B 站 Index-Translate 免费 API 翻译文本和图片
+desc: |
+  基于 bilibili/Index-Translate 的免费公开 API（https://index-translate.bilibili.com/v1），
+  免鉴权、无需 key，支持三档模型（35B-A3B / 9B / 2B）。
+
+  - 文本翻译：翻译 这句话
+  - 指定语言：翻译成日语 这句话
+  - 图片翻译：发图并在引用时发「翻译」，或直接发图配「翻译」任意文字
+  - 引用翻译：引用任意消息后只发「翻译」，自动翻被引用的文字或图片
+  - 长文本自动分段翻译后拼接
+
+  触发词：翻译 / 翻译成 / 译 / tr
+version: 0.1.0
+author: 小鲸鱼
+repo: https://github.com/bilibili/Index-Translate
+astrbot_version: ">=4.16,<5"
+support_platforms:
+  - aiocqhttp
+  - qq_official
+  - weixin_oc
