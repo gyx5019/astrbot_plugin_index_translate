@@ -29,10 +29,10 @@
 ## 安装
 
 1. 在 AstrBot 的插件管理里从本仓库安装，或直接把整个目录丢进 `data/plugins/`
-2. 重载插件（新装插件需要走安装流程，热重载拉不起未注册的插件）
-3. 在插件配置里按需改 `target_lang` / `model`
-
-依赖：`httpx`（AstrBot 自带）。
+2. 装依赖：`pip install -r requirements.txt`（其实 AstrBot 已自带 `httpx` 和 `Pillow`，这步可选）
+3. 系统装 `ffmpeg`（语音翻译要用 `ffprobe` 读时长）：`apt install -y ffmpeg` / `brew install ffmpeg`
+4. 重载插件（新装插件需要走安装流程，热重载拉不起未注册的插件）
+5. 在插件配置里按需改 `target_lang` / `model`
 
 ## 配置
 
