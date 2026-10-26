@@ -26,7 +26,7 @@ import httpx
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image, Reply
+from astrbot.api.message_components import Image, Record, Reply
 from astrbot.api.star import Context, Star
 
 DEFAULT_API_BASE = "https://index-translate.bilibili.com/v1"
@@ -150,12 +150,24 @@ class IndexTranslatePlugin(Star):
     async def on_message(self, event: AstrMessageEvent):
         raw = (event.message_str or "").strip()
         m = TRIGGER.match(raw)
+        voice_on = bool(self.config.get("voice_translate", True))
+
+        # 没带「翻译」关键词：纯语音 + voice_auto 才自动走语音翻译
         if not m:
+            if voice_on and not raw and self.config.get("voice_auto"):
+                voices = await self._collect_voices(event)
+                if voices:
+                    event.stop_event()
+                    async for r in self._voice_flow(
+                        event, voices, str(self.config.get("target_lang") or "en")
+                    ):
+                        yield r
             return
         payload = (m.group(1) or "").strip()
 
         quoted_text = ""
         images: list[str] = []
+        voices: list[str] = []
         for comp in event.message_obj.message:
             if isinstance(comp, Reply):
                 quoted_text = (getattr(comp, "message_str", "") or "").strip()
@@ -165,11 +177,21 @@ class IndexTranslatePlugin(Star):
                             images.append(await sub.convert_to_file_path())
                         except Exception as e:
                             logger.warning(f"[IndexTranslate] 引用图片取不到: {e}")
+                    elif isinstance(sub, Record):
+                        try:
+                            voices.append(await sub.convert_to_file_path())
+                        except Exception as e:
+                            logger.warning(f"[IndexTranslate] 引用语音取不到: {e}")
             elif isinstance(comp, Image):
                 try:
                     images.append(await comp.convert_to_file_path())
                 except Exception as e:
                     logger.warning(f"[IndexTranslate] 图片取不到: {e}")
+            elif isinstance(comp, Record):
+                try:
+                    voices.append(await comp.convert_to_file_path())
+                except Exception as e:
+                    logger.warning(f"[IndexTranslate] 语音取不到: {e}")
 
         target = str(self.config.get("target_lang") or "en")
         if payload:
@@ -190,6 +212,12 @@ class IndexTranslatePlugin(Star):
             return
 
         event.stop_event()
+
+        # 语音：转文字 → 翻译（可选 TTS 念回来）
+        if voices and voice_on:
+            async for r in self._voice_flow(event, voices, target):
+                yield r
+            return
 
         # 图片 + 回填开关 + OCR 已就绪 → 输出译好的图
         if images and self.config.get("image_render") and self._ocr_ready():
@@ -218,6 +246,74 @@ class IndexTranslatePlugin(Star):
             yield event.plain_result("模型没吐译文出来，可能内容太长或被拦了，换个短点的试试")
             return
         yield event.plain_result(result)
+
+    # ---------------- 语音 ----------------
+    async def _collect_voices(self, event: AstrMessageEvent) -> list[str]:
+        out: list[str] = []
+        for comp in event.message_obj.message:
+            if isinstance(comp, Reply):
+                for sub in (getattr(comp, "chain", None) or []):
+                    if isinstance(sub, Record):
+                        try:
+                            out.append(await sub.convert_to_file_path())
+                        except Exception as e:
+                            logger.warning(f"[IndexTranslate] 引用语音取不到: {e}")
+            elif isinstance(comp, Record):
+                try:
+                    out.append(await comp.convert_to_file_path())
+                except Exception as e:
+                    logger.warning(f"[IndexTranslate] 语音取不到: {e}")
+        return out
+
+    async def _voice_flow(self, event: AstrMessageEvent, voices: list[str], target: str):
+        try:
+            stt = await self.context.get_using_stt_provider_async(event.unified_msg_origin)
+        except Exception as e:
+            logger.error(f"[IndexTranslate] 取 STT provider 失败: {e}")
+            stt = None
+        if not stt:
+            yield event.plain_result("没配语音转文字（STT）模型，这段语音我听不出来")
+            return
+
+        try:
+            heard = (await stt.get_text(audio_url=voices[0])) or ""
+        except Exception as e:
+            logger.error(f"[IndexTranslate] 语音转文字失败: {e}")
+            yield event.plain_result(f"语音转文字失败了：{e}")
+            return
+        heard = heard.strip()
+        if not heard:
+            yield event.plain_result("没听清，换一段试试")
+            return
+
+        try:
+            translated = await self._translate(heard, target, None)
+        except Exception as e:
+            logger.error(f"[IndexTranslate] 语音翻译失败: {e}")
+            yield event.plain_result(f"翻不动了：{e}")
+            return
+        if not translated.strip():
+            yield event.plain_result("模型没吐译文出来，换个短点的试试")
+            return
+
+        yield event.plain_result(translated)
+
+        if not self.config.get("voice_reply", True):
+            return
+        try:
+            tts = await self.context.get_using_tts_provider_async(event.unified_msg_origin)
+        except Exception as e:
+            logger.warning(f"[IndexTranslate] 取 TTS provider 失败: {e}")
+            return
+        if not tts:
+            return
+        try:
+            audio = await tts.get_audio(translated)
+        except Exception as e:
+            logger.warning(f"[IndexTranslate] TTS 合成失败: {e}")
+            return
+        if audio:
+            yield event.chain_result([Record(file=audio)])
 
     # ---------------- 纯文本 / 多模态 ----------------
     async def _translate(self, text: str, target: str, image_path: str | None) -> str:
