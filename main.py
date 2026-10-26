@@ -203,6 +203,9 @@ class IndexTranslatePlugin(Star):
                     yield event.plain_result(translated_text)
                 yield event.image_result(out_image)
                 return
+            if translated_text:
+                yield event.plain_result(translated_text)
+                return
 
         try:
             result = await self._translate(text, target, images[0] if images else None)
@@ -265,8 +268,11 @@ class IndexTranslatePlugin(Star):
     async def _translate_image_render(
         self, image_path: str, target: str, hint: str
     ) -> tuple[str | None, str | None]:
-        blocks = await self._ocr(image_path)
+        blocks, plain = await self._ocr(image_path)
         if not blocks:
+            # 没坐标就只剩文字了：直接拿 OCR 文本走文本翻译，别硬塞回图里
+            if plain:
+                return await self._translate(plain, target, None), None
             return None, None
         texts = await self._translate_batch([b["text"] for b in blocks], target)
         out_image = await asyncio.to_thread(self._render_image, image_path, blocks, texts)
@@ -277,6 +283,8 @@ class IndexTranslatePlugin(Star):
         provider = str(self.config.get("ocr_provider") or "cnocr").lower().strip()
         if provider in ("glm", "bigmodel", "zhipu"):
             return bool(str(self.config.get("ocr_api_key") or "").strip())
+        if provider in ("deepseek", "deepseek-ocr", "ds"):
+            return bool(str(self.config.get("ocr_api_base") or "").strip())
         return bool(str(self.config.get("ocr_api_base") or "").strip())
 
     async def _ocr(self, image_path: str) -> list[dict]:
@@ -301,6 +309,40 @@ class IndexTranslatePlugin(Star):
                 )
             if r.status_code != 200:
                 raise RuntimeError(f"GLM-OCR HTTP {r.status_code}：{r.text[:200]}")
+        elif provider in ("deepseek", "deepseek-ocr", "ds"):
+            # 自己用 vLLM 起的 DeepSeek-OCR，OpenAI 兼容接口
+            base = str(self.config.get("ocr_api_base") or "http://127.0.0.1:8000/v1").strip().rstrip("/")
+            model = str(self.config.get("ocr_model") or "deepseek-ai/DeepSeek-OCR")
+            prompt = str(self.config.get("ocr_prompt") or "<image>\n<|grounding|>OCR this image.")
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+                r = await client.post(
+                    f"{base}/chat/completions",
+                    json={
+                        "model": model,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "image_url", "image_url": {"url": to_data_url(image_path)}},
+                                    {"type": "text", "text": prompt},
+                                ],
+                            }
+                        ],
+                        "temperature": 0.0,
+                        "max_tokens": 4096,
+                        # 关掉特殊 token 过滤，不然 <|ref|>/<|det|> 会被吃掉
+                        "skip_special_tokens": False,
+                    },
+                )
+            if r.status_code != 200:
+                raise RuntimeError(f"DeepSeek-OCR HTTP {r.status_code}：{r.text[:200]}")
+            out_text = ((r.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+            blocks = self._normalize_boxes(self._parse_deepseek_det(out_text), image_path)
+            plain = re.sub(r"<\|[^|]+\|>", "", out_text).strip()
+            if not blocks:
+                logger.warning(f"[IndexTranslate] DeepSeek-OCR 没解析出坐标，原始片段：{out_text[:300]}")
+            blocks.sort(key=lambda b: (round(b["box"][1] / 10), b["box"][0]))
+            return blocks, plain
         else:
             base = str(self.config.get("ocr_api_base") or "").strip().rstrip("/")
             path = str(self.config.get("ocr_api_path") or "/ocr").strip()
@@ -315,11 +357,75 @@ class IndexTranslatePlugin(Star):
                 raise RuntimeError(f"OCR HTTP {r.status_code}：{r.text[:200]}")
 
         blocks = self._collect_blocks(r.json())
+        plain = self._extract_plain(r.json())
         if not blocks:
-            logger.warning(f"[IndexTranslate] OCR 没解析出文字块，原始返回片段：{r.text[:300]}")
-            return []
+            logger.warning(
+                f"[IndexTranslate] OCR 没解析出坐标，原始返回片段：{r.text[:300]}"
+            )
+            return [], plain
+
+        # GLM 的 bbox_2d 是 0~1 的相对坐标，得按图片尺寸换算成像素
+        try:
+            from PIL import Image as _Image
+
+            with _Image.open(image_path) as im:
+                img_w, img_h = im.size
+        except Exception:
+            img_w = img_h = 0
+        if img_w and img_h:
+            for b in blocks:
+                x0, y0, x1, y1 = b["box"]
+                if max(abs(x0), abs(y0), abs(x1), abs(y1)) <= 1.5:
+                    b["box"] = (x0 * img_w, y0 * img_h, x1 * img_w, y1 * img_h)
+
         blocks.sort(key=lambda b: (round(b["box"][1] / 10), b["box"][0]))
+        return blocks, plain
+
+    @staticmethod
+    def _extract_plain(payload) -> str:
+        """有些 OCR（比如 GLM 的文档解析）会额外给一份整体文本，留着兜底用。"""
+        if not isinstance(payload, dict):
+            return ""
+        for key in ("md_results", "text", "content", "markdown"):
+            val = payload.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        return ""
+
+    @staticmethod
+    def _normalize_boxes(blocks: list[dict], image_path: str) -> list[dict]:
+        """坐标可能是 0~1 归一化，也可能是像素，按最大值判断后换算。"""
+        try:
+            from PIL import Image as _Image
+
+            with _Image.open(image_path) as im:
+                img_w, img_h = im.size
+        except Exception:
+            return blocks
+        if not blocks or not img_w or not img_h:
+            return blocks
+        for b in blocks:
+            x0, y0, x1, y1 = b["box"]
+            if max(abs(x0), abs(y0), abs(x1), abs(y1)) <= 1.5:
+                b["box"] = (x0 * img_w, y0 * img_h, x1 * img_w, y1 * img_h)
         return blocks
+
+    @staticmethod
+    def _parse_deepseek_det(text: str) -> list[dict]:
+        """DeepSeek-OCR grounding 输出：<|ref|>文字<|/ref|><|det|>[[x1,y1,x2,y2]]<|/det|>"""
+        out: list[dict] = []
+        pattern = re.compile(
+            r"<\|ref\|>(.*?)<\|/ref\|>\s*<\|det\|>\s*(?:\[\[)?([\-\d.,\s]+?)(?:\]\])?\s*<\|/det\|>",
+            re.S,
+        )
+        for m in pattern.finditer(text or ""):
+            label = (m.group(1) or "").strip()
+            nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", m.group(2) or "")]
+            if not label or len(nums) < 4:
+                continue
+            xs, ys = nums[0::2], nums[1::2]
+            out.append({"text": label, "box": (min(xs), min(ys), max(xs), max(ys))})
+        return out
 
     @classmethod
     def _collect_blocks(cls, obj, out: list | None = None) -> list[dict]:
@@ -444,27 +550,38 @@ class IndexTranslatePlugin(Star):
 
         x0, y0, x1, y1 = box
         bw, bh = x1 - x0, y1 - y0
+        # textlength 量不了含换行的串，先按原文换行拆段，段内再按宽度折
+        paragraphs = (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        if not paragraphs:
+            paragraphs = [text or ""]
+
         size = max(8, int(bh * 0.92))
         while size >= 8:
             try:
                 font = ImageFont.truetype(font_path, size)
             except Exception:
                 return
-            lines, cur = [], ""
-            for ch in text:
-                if draw.textlength(cur + ch, font=font) <= bw - 2:
-                    cur += ch
-                else:
-                    if cur:
-                        lines.append(cur)
-                    cur = ch
-            if cur:
+            lines: list[str] = []
+            for para in paragraphs:
+                cur = ""
+                for ch in para:
+                    try:
+                        fits = draw.textlength(cur + ch, font=font) <= bw - 2
+                    except Exception:
+                        fits = True
+                    if fits:
+                        cur += ch
+                    else:
+                        if cur:
+                            lines.append(cur)
+                        cur = ch
                 lines.append(cur)
             line_h = size + 3
             if len(lines) * line_h <= bh + 2:
                 y = y0 + max(0, (bh - len(lines) * line_h) // 2)
                 for line in lines:
-                    draw.text((x0 + 1, y), line, font=font, fill=color)
+                    if line:
+                        draw.text((x0 + 1, y), line, font=font, fill=color)
                     y += line_h
                 return
             size = int(size * 0.85)
