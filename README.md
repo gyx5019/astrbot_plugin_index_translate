@@ -19,6 +19,7 @@
 | 引用图片翻译 | 引用一张图后只发 `翻译` |
 | 直接发图 | 图片配一句 `翻译`（或引用带图消息再发 `翻译`） |
 | 图片回填成图 | 开启 `image_render` + 配好 OCR，直接发回一张「原文被替换成译文」的图 |
+| 语音翻译 | 引用一条语音后发 `翻译`，转文字 → 翻译 → 可选 TTS 念回来 |
 | 英文触发词 | `tr hello world` / `译 hello world` |
 
 - 长文本按段落自动切段（默认 900 字）逐段翻译后拼接，避免被 `max_tokens` 截断
@@ -51,6 +52,9 @@
 | `ocr_api_path` | string | `/ocr` | cnocr 的接口路径 |
 | `ocr_timeout` | int | `60` | OCR 超时（秒） |
 | `render_font` | string | `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc` | 回填文字用的字体 |
+| `voice_translate` | bool | `true` | 语音翻译总开关 |
+| `voice_auto` | bool | `false` | 直接发语音就自动翻（不用配「翻译」） |
+| `voice_reply` | bool | `true` | 译文用 TTS 语音回一遍 |
 
 ## 图片回填（可选）
 
@@ -88,6 +92,19 @@ Content-Type: application/json
 然后 `ocr_provider = glm`，`ocr_api_key = 你的 key`，`ocr_api_base` 留空即可。
 
 > 注意：`glm` 和 `cnocr` 都会返回坐标、能回填。两家的返回结构差很多，插件统一做了兼容：递归找「带文本 + 带坐标」的节点（`position` / `bbox_2d` / `bbox` 都认），坐标是 0~1 归一化还是像素会自动判断。
+
+## 语音翻译
+
+走的是 AstrBot 自己的 STT / TTS provider，插件不额外配 key。
+
+1. 引用一条语音消息，发 `翻译`
+2. 用会话绑定的 STT provider 把语音转成文字
+3. 交给 Index-Translate 翻译
+4. 先发文字译文，再用 TTS provider 合成一段语音发出来（`voice_reply` 可关）
+
+想让它听到语音就自动翻，打开 `voice_auto`（默认关，免得群里聊着聊着被打断）。
+
+STT/TTS 在 AstrBot 的「服务提供商」里配，插件这边只认当前会话绑定的那个。
 
 ## 原理
 
