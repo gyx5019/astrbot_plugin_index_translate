@@ -12,7 +12,7 @@ desc: |
   - 长文本自动分段翻译后拼接
 
   触发词：翻译 / 翻译成 / 译 / tr
-version: 0.1.0
+version: 0.1.1
 author: 小鲸鱼
 repo: https://github.com/bilibili/Index-Translate
 astrbot_version: ">=4.16,<5"
