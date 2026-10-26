@@ -76,7 +76,7 @@
     "type": "string",
     "description": "OCR 服务地址",
     "default": "",
-    "hint": "cnocr 例：http://127.0.0.1:8501；glm 留空则用 https://open.bigmodel.cn/api/paas/v4。留空且选 cnocr 时图片翻译走文字输出"
+    "hint": "cnocr 例：http://127.0.0.1:8501；glm 留空用 https://open.bigmodel.cn/api/paas/v4；deepseek 留空用 https://api.deepseek.com（也可填 PPIO 的 https://api.ppio.com/openai 或自建 vLLM）"
   },
   "ocr_api_key": {
     "type": "string",
