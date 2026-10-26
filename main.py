@@ -283,6 +283,11 @@ class IndexTranslatePlugin(Star):
         provider = str(self.config.get("ocr_provider") or "cnocr").lower().strip()
         if provider in ("glm", "bigmodel", "zhipu"):
             return bool(str(self.config.get("ocr_api_key") or "").strip())
+        if provider in ("deepseek", "ds"):
+            base = str(self.config.get("ocr_api_base") or "").strip()
+            if base.startswith(("http://127.", "http://localhost", "http://192.168.", "http://10.")):
+                return True
+            return bool(str(self.config.get("ocr_api_key") or "").strip())
         return bool(str(self.config.get("ocr_api_base") or "").strip())
 
     async def _ocr(self, image_path: str) -> list[dict]:
@@ -307,6 +312,44 @@ class IndexTranslatePlugin(Star):
                 )
             if r.status_code != 200:
                 raise RuntimeError(f"GLM-OCR HTTP {r.status_code}：{r.text[:200]}")
+        elif provider in ("deepseek", "ds"):
+            # DeepSeek 官方视觉接口（deepseek-flash）：只识别文字，不返回坐标
+            base = str(
+                self.config.get("ocr_api_base") or "https://api.deepseek.com"
+            ).strip().rstrip("/")
+            model = str(self.config.get("ocr_model") or "deepseek-flash")
+            prompt = str(
+                self.config.get("ocr_prompt")
+                or "请逐行识别图片中的所有文字，原样输出，不要翻译、不要解释、不要加任何说明。"
+            )
+            key = str(self.config.get("ocr_api_key") or "").strip()
+            headers = {"Content-Type": "application/json"}
+            if key:
+                headers["Authorization"] = f"Bearer {key}"
+            async with httpx.AsyncClient(timeout=timeout, trust_env=True) as client:
+                r = await client.post(
+                    f"{base}/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": model,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "image_url", "image_url": {"url": to_data_url(image_path)}},
+                                    {"type": "text", "text": prompt},
+                                ],
+                            }
+                        ],
+                        "temperature": 0.0,
+                        "max_tokens": 4096,
+                    },
+                )
+            if r.status_code != 200:
+                raise RuntimeError(f"DeepSeek HTTP {r.status_code}：{r.text[:200]}")
+            out_text = ((r.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+            # 官方 VLM 不给坐标，只有文本，交给上层走文本翻译
+            return [], out_text.strip()
         else:
             base = str(self.config.get("ocr_api_base") or "").strip().rstrip("/")
             path = str(self.config.get("ocr_api_path") or "/ocr").strip()
