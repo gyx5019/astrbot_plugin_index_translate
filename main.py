@@ -313,11 +313,11 @@ class IndexTranslatePlugin(Star):
             if r.status_code != 200:
                 raise RuntimeError(f"GLM-OCR HTTP {r.status_code}：{r.text[:200]}")
         elif provider in ("deepseek", "deepseek-ocr", "ds"):
-            # DeepSeek-OCR：PPIO 的 OpenAI 兼容接口，或自己用 vLLM 起的
+            # DeepSeek：官方接口或自建 vLLM（OpenAI 兼容）
             base = str(
                 self.config.get("ocr_api_base") or "https://api.deepseek.com"
             ).strip().rstrip("/")
-            model = str(self.config.get("ocr_model") or "deepseek/deepseek-ocr")
+            model = str(self.config.get("ocr_model") or "deepseek-ai/DeepSeek-OCR")
             prompt = str(self.config.get("ocr_prompt") or "<|grounding|>OCR this image.")
             key = str(self.config.get("ocr_api_key") or "").strip()
             headers = {"Content-Type": "application/json"}
