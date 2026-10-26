@@ -53,6 +53,9 @@
 | `ocr_timeout` | int | `60` | OCR 超时（秒） |
 | `render_font` | string | `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc` | 回填文字用的字体 |
 | `voice_translate` | bool | `true` | 语音翻译总开关 |
+| `asr_api_base` | string | 空 | 语音转文字的接口地址（OpenAI 兼容） |
+| `asr_api_key` | string | 空 | 语音转文字的 API Key |
+| `asr_model` | string | `qwen3-asr-flash` | 语音转文字的模型名 |
 | `voice_auto` | bool | `false` | 直接发语音就自动翻（不用配「翻译」） |
 | `voice_reply` | bool | `true` | 译文用 TTS 语音回一遍 |
 
@@ -104,7 +107,14 @@ Content-Type: application/json
 
 想让它听到语音就自动翻，打开 `voice_auto`（默认关，免得群里聊着聊着被打断）。
 
-STT/TTS 在 AstrBot 的「服务提供商」里配，插件这边只认当前会话绑定的那个。
+语音转文字有两种走法：
+
+1. 插件自己配 `asr_api_base` + `asr_api_key` + `asr_model`，直接打 OpenAI 兼容的 ASR 接口（推荐，实测阿里云 MaaS 网关用 `qwen3-asr-flash` 可通）
+2. 留空则会退回用 AstrBot 里绑定的 STT provider
+
+> 注意：AstrBot 自带的 `openai_whisper_api` 走 `/audio/transcriptions`，在 Qwen 这类只提供 `chat/completions` 的网关上会 404，那种情况请用第 1 种。
+
+TTS 走 AstrBot 里绑定的那个（如 `gemini_tts`）。
 
 ## 原理
 
