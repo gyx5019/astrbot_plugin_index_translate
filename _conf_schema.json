@@ -80,8 +80,9 @@
   },
   "ocr_api_key": {
     "type": "string",
-    "description": "GLM-OCR 的 API Key（选 glm 时必填）",
-    "default": ""
+    "description": "OCR 服务的 API Key（glm / deepseek 共用这一栏）",
+    "default": "",
+    "hint": "选 glm 填智谱的 key；选 deepseek 填 PPIO / DeepSeek 官方 / 自建中转的 key；cnocr 自建服务不用填"
   },
   "ocr_api_path": {
     "type": "string",
