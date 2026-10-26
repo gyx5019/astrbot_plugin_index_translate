@@ -45,9 +45,7 @@
 | `api_base` | string | `https://index-translate.bilibili.com/v1` | API 地址，自建可改 |
 | `show_usage` | bool | `false` | 是否在结果后附耗时/用量 |
 | `image_render` | bool | `false` | 图片翻译是否输出「回填译文的图」 |
-| `ocr_provider` | string | `cnocr` | OCR 用哪家：`cnocr` / `glm` / `deepseek` |
-| `ocr_model` | string | `deepseek-ai/DeepSeek-OCR` | `deepseek` 模式的模型名 |
-| `ocr_prompt` | string | `<image>\n<\|grounding\|>OCR this image.` | `deepseek` 模式的提示词，带 `<|grounding|>` 才有坐标 |
+| `ocr_provider` | string | `cnocr` | OCR 用哪家：`cnocr` / `glm` |
 | `ocr_api_base` | string | 空 | cnocr 填服务地址；glm 留空则用官方地址 |
 | `ocr_api_key` | string | 空 | 选 `glm` 时必填 |
 | `ocr_api_path` | string | `/ocr` | cnocr 的接口路径 |
@@ -66,7 +64,7 @@
 
 任何一步失败都会自动退回文字输出，不会丢图。
 
-三种 OCR 选一种：
+两种 OCR 二选一：
 
 **CnOCR（自己起服务）**
 
@@ -89,31 +87,7 @@ Content-Type: application/json
 
 然后 `ocr_provider = glm`，`ocr_api_key = 你的 key`，`ocr_api_base` 留空即可。
 
-**DeepSeek-OCR（官方接口，或自己起 vLLM）**
-
-默认走 `https://api.deepseek.com`，key 填在 `ocr_api_key`：
-
-```python
-base_url = "https://api.deepseek.com"
-```
-
-自己用 vLLM 起也支持（OpenAI 兼容）：`vllm serve deepseek-ai/DeepSeek-OCR --trust-remote-code`，把 `ocr_api_base` 填 `http://127.0.0.1:8000/v1`，模型填 `deepseek-ai/DeepSeek-OCR`。
-
-提示词带 `<|grounding|>` 才会返回坐标：
-
-```
-<|grounding|>OCR this image.
-```
-
-返回是一串标记，插件按 `<|ref|>` / `<|det|>` 配对拆：
-
-```
-<|ref|>BaseURL:<|/ref|><|det|>[[34, 105, 227, 209]]<|/det|>
-```
-
-坐标是**原图像素**，不是归一化，插件会自动识别。
-
-> 三家返回结构差很多，插件统一做了兼容：递归找「带文本 + 带坐标」的节点（`position` / `bbox_2d` / `bbox` / `<|ref|><|det|>` 标记都认），坐标是 0~1 归一化还是像素会自动判断。
+> 两家返回结构差很多，插件统一做了兼容：递归找「带文本 + 带坐标」的节点（`position` / `bbox_2d` / `bbox` / `<|ref|><|det|>` 标记都认），坐标是 0~1 归一化还是像素会自动判断。
 
 ## 原理
 
