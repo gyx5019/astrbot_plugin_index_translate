@@ -1,0 +1,50 @@
+{
+  "target_lang": {
+    "type": "string",
+    "description": "默认目标语言",
+    "default": "en",
+    "options": [
+      "zh", "en", "ja", "ko", "fr", "de", "es", "pt", "ru", "it",
+      "ar", "hi", "vi", "th", "id", "ms", "fil", "tr", "nl", "pl",
+      "sv", "ukr_cyrl", "fas_arab", "ces_latn", "ell_grek"
+    ],
+    "hint": "中文=zh，英语=en，日语=ja……也可以在指令里临时指定，如「翻译成日语 xxx」"
+  },
+  "model": {
+    "type": "string",
+    "description": "模型",
+    "default": "Index-Translate-35B-A3B",
+    "options": [
+      "Index-Translate-35B-A3B",
+      "Index-Translate-9B",
+      "Index-Translate-2B"
+    ],
+    "hint": "35B-A3B 是旗舰，效果最好；9B 均衡；2B 最快最省"
+  },
+  "max_tokens": {
+    "type": "int",
+    "description": "单次生成的最大 token 数",
+    "default": 1024
+  },
+  "chunk_chars": {
+    "type": "int",
+    "description": "长文本分段长度（字符）",
+    "default": 900,
+    "hint": "超过这个长度会按段落切片逐段翻译再拼起来，0 表示不分段"
+  },
+  "timeout": {
+    "type": "int",
+    "description": "单次请求超时（秒）",
+    "default": 90
+  },
+  "api_base": {
+    "type": "string",
+    "description": "API 地址",
+    "default": "https://index-translate.bilibili.com/v1"
+  },
+  "show_usage": {
+    "type": "bool",
+    "description": "翻译结果末尾附上耗时和 token 用量",
+    "default": false
+  }
+}
