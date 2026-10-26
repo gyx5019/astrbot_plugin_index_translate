@@ -116,6 +116,24 @@ Content-Type: application/json
 
 TTS 走 AstrBot 里绑定的那个（如 `gemini_tts`）。
 
+## 目录结构
+
+```
+astrbot_plugin_index_translate/
+├── main.py             入口：Star 类、消息路由、翻译主体
+├── ocr.py              OCR 与图片回填（cnocr / glm），mixin
+├── voice.py            语音、音频（ASR → 翻译 → TTS），mixin
+├── data/               运行数据
+│   ├── plugin.log      插件日志（超 2MB 自动轮转为 plugin.log.1）
+│   └── *.bak.*         改动前的备份
+├── _conf_schema.json   配置定义
+├── metadata.yaml       插件元信息
+├── requirements.txt    依赖
+└── README.md
+
+```
+OCR 和语音用 mixin 拆出去，方法仍挂在同一个 `self` 上，所以 `self._ocr()`、`self._voice_flow()` 这类调用不用改。
+
 ## 原理
 
 请求格式与官方 `call_api.py` 一致：
