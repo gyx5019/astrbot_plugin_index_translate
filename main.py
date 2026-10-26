@@ -265,18 +265,53 @@ class IndexTranslatePlugin(Star):
                     logger.warning(f"[IndexTranslate] 语音取不到: {e}")
         return out
 
+    async def _asr(self, audio_path: str, event=None) -> str:
+        """先走插件自己配的 ASR 网关；没配就退回 AstrBot 的 STT provider。"""
+        base = str(self.config.get("asr_api_base") or "").strip().rstrip("/")
+        key = str(self.config.get("asr_api_key") or "").strip()
+        model = str(self.config.get("asr_model") or "qwen3-asr-flash")
+        if base and key:
+            data = Path(audio_path).read_bytes()
+            mime = {
+                ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4",
+                ".ogg": "audio/ogg", ".amr": "audio/amr", ".silk": "audio/silk",
+                ".flac": "audio/flac",
+            }.get(Path(audio_path).suffix.lower(), "audio/wav")
+            data_uri = f"data:{mime};base64,{base64.b64encode(data).decode()}"
+            async with httpx.AsyncClient(timeout=120, trust_env=True) as client:
+                r = await client.post(
+                    f"{base}/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "input_audio", "input_audio": {"data": data_uri}}],
+                            }
+                        ],
+                        "stream": False,
+                        "asr_options": {"enable_itn": False},
+                    },
+                )
+            if r.status_code != 200:
+                raise RuntimeError(f"ASR HTTP {r.status_code}：{r.text[:200]}")
+            return ((r.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+
+        stt = None
+        if event is not None:
+            try:
+                stt = await self.context.get_using_stt_provider_async(event.unified_msg_origin)
+            except Exception as e:
+                logger.error(f"[IndexTranslate] 取 STT provider 失败: {e}")
+                stt = None
+        if stt:
+            return (await stt.get_text(audio_url=audio_path)) or ""
+        return ""
+
     async def _voice_flow(self, event: AstrMessageEvent, voices: list[str], target: str):
         try:
-            stt = await self.context.get_using_stt_provider_async(event.unified_msg_origin)
-        except Exception as e:
-            logger.error(f"[IndexTranslate] 取 STT provider 失败: {e}")
-            stt = None
-        if not stt:
-            yield event.plain_result("没配语音转文字（STT）模型，这段语音我听不出来")
-            return
-
-        try:
-            heard = (await stt.get_text(audio_url=voices[0])) or ""
+            heard = await self._asr(voices[0], event)
         except Exception as e:
             logger.error(f"[IndexTranslate] 语音转文字失败: {e}")
             yield event.plain_result(f"语音转文字失败了：{e}")
