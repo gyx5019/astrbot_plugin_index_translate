@@ -98,7 +98,9 @@ Content-Type: application/json
 
 ## 语音翻译
 
-走的是 AstrBot 自己的 STT / TTS provider，插件不额外配 key。
+> **注意：语音翻译目前只实测过 `qwen3-asr-flash`（阿里云 MaaS 网关），其它 ASR 模型 / 服务未经验证，需自行测试。**
+
+语音转文字有两条路（见下方说明），TTS 走 AstrBot 里已加载的 TTS provider。
 
 1. 引用一条语音消息，发 `翻译`
 2. 用会话绑定的 STT provider 把语音转成文字
