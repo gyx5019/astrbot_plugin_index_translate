@@ -18,6 +18,7 @@
 | 引用消息翻译 | 引用任意消息后只发 `翻译` |
 | 引用图片翻译 | 引用一张图后只发 `翻译` |
 | 直接发图 | 图片配一句 `翻译`（或引用带图消息再发 `翻译`） |
+| 图片回填成图 | 开启 `image_render` + 配好 OCR，直接发回一张「原文被替换成译文」的图 |
 | 英文触发词 | `tr hello world` / `译 hello world` |
 
 - 长文本按段落自动切段（默认 900 字）逐段翻译后拼接，避免被 `max_tokens` 截断
@@ -43,6 +44,50 @@
 | `timeout` | int | `90` | 单次请求超时（秒） |
 | `api_base` | string | `https://index-translate.bilibili.com/v1` | API 地址，自建可改 |
 | `show_usage` | bool | `false` | 是否在结果后附耗时/用量 |
+| `image_render` | bool | `false` | 图片翻译是否输出「回填译文的图」 |
+| `ocr_provider` | string | `cnocr` | OCR 用哪家：`cnocr` / `glm` |
+| `ocr_api_base` | string | 空 | cnocr 填服务地址；glm 留空则用官方地址 |
+| `ocr_api_key` | string | 空 | 选 `glm` 时必填 |
+| `ocr_api_path` | string | `/ocr` | cnocr 的接口路径 |
+| `ocr_timeout` | int | `60` | OCR 超时（秒） |
+| `render_font` | string | `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc` | 回填文字用的字体 |
+
+## 图片回填（可选）
+
+默认关闭，图片翻译只输出文字。开启 `image_render` 并配好 OCR 后，会走这条路：
+
+1. OCR 逐块拿到文字和坐标
+2. 各块拼成一个 JSON 一次性翻译（省调用；漏翻的逐块补翻）
+3. 按框擦掉原文（背景色从框外一圈采样，取中位色）
+4. 写入译文（字色按亮度自动选黑/白，自动折行、缩字号塞进框）
+5. 发回一张 `xxx_translated.png`
+
+任何一步失败都会自动退回文字输出，不会丢图。
+
+两种 OCR 二选一：
+
+**CnOCR（自己起服务）**
+
+```bash
+pip install "cnocr[serve]"
+cnocr serve -p 8501
+```
+
+然后 `ocr_provider = cnocr`，`ocr_api_base = http://127.0.0.1:8501`。
+
+**智谱 GLM-OCR**
+
+```http
+POST https://open.bigmodel.cn/api/paas/v4/layout_parsing
+Authorization: <你的 API Key>
+Content-Type: application/json
+
+{"model": "glm-ocr", "file": "<图片 URL 或 base64>"}
+```
+
+然后 `ocr_provider = glm`，`ocr_api_key = 你的 key`，`ocr_api_base` 留空即可。
+
+> 两家返回结构不一样，插件用递归方式找「带文本 + 带坐标」的节点，`position` / `bbox_2d` / `bbox` 三种字段名都认。
 
 ## 原理
 
