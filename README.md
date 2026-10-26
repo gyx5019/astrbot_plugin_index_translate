@@ -1,7 +1,7 @@
 # astrbot_plugin_index_translate
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.16-blue)](https://github.com/AstrBotDevs/AstrBot)
-[![version](https://img.shields.io/badge/version-0.1.0-green)]()
+[![version](https://img.shields.io/badge/version-0.1.1-green)]()
 
 调用 **[bilibili/Index-Translate](https://github.com/bilibili/Index-Translate)** 免费公开 API 的 AstrBot 翻译插件。
 
