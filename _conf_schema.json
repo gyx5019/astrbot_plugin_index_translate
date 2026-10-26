@@ -81,21 +81,33 @@
     "default": "cnocr",
     "options": [
       "cnocr",
-      "glm"
+      "glm",
+      "deepseek"
     ],
-    "hint": "cnocr：自己起 CnOCR 的 FastAPI（cnocr serve -p 8501）；glm：智谱 GLM-OCR（需 API Key）"
+    "hint": "cnocr：自己起 CnOCR 的 FastAPI（cnocr serve -p 8501）；glm：智谱 GLM-OCR（返回坐标，可回填出图）；deepseek：DeepSeek 官方视觉接口 deepseek-flash（只识别文字，不返回坐标）"
   },
   "ocr_api_base": {
     "type": "string",
     "description": "OCR 服务地址",
     "default": "",
-    "hint": "cnocr 例：http://127.0.0.1:8501；glm 留空用 https://open.bigmodel.cn/api/paas/v4"
+    "hint": "cnocr 例：http://127.0.0.1:8501；glm 留空用 https://open.bigmodel.cn/api/paas/v4；deepseek 留空用 https://api.deepseek.com"
   },
   "ocr_api_key": {
     "type": "string",
-    "description": "OCR 服务的 API Key（选 glm 时填）",
+    "description": "OCR 服务的 API Key（glm / deepseek 共用）",
     "default": "",
-    "hint": "选 glm 时填智谱的 key；cnocr 自建服务不用填"
+    "hint": "选 glm 填智谱的 key；选 deepseek 填 DeepSeek 官方 key；cnocr 自建服务不用填"
+  },
+  "ocr_model": {
+    "type": "string",
+    "description": "deepseek 模式下的模型名",
+    "default": "deepseek-flash",
+    "hint": "官方支持图片的是 deepseek-flash；deepseek-v4-pro 不吃图"
+  },
+  "ocr_prompt": {
+    "type": "string",
+    "description": "deepseek 模式下的识别提示词",
+    "default": "请逐行识别图片中的所有文字，原样输出，不要翻译、不要解释、不要加任何说明。"
   },
   "ocr_api_path": {
     "type": "string",
