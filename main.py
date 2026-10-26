@@ -6,11 +6,18 @@ OpenAI 兼容格式、免鉴权、无需 API Key。
 
 触发：翻译 xxx / 翻译成日语 xxx / 译 xxx / tr xxx
 引用消息后只发「翻译」→ 翻译被引用的文字或图片。
+
+图片有两种输出：
+  - 默认：把图丢给多模态模型，输出译文文字
+  - 开启 image_render 且配置了 ocr_api_base：先 OCR 拿到文字坐标，
+    擦掉原文把译文写回去，输出一张译好的图（CnOCR FastAPI，cnocr serve -p 8501）
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import json
 import mimetypes
 import re
 from pathlib import Path
@@ -24,6 +31,7 @@ from astrbot.api.star import Context, Star
 
 DEFAULT_API_BASE = "https://index-translate.bilibili.com/v1"
 DEFAULT_MODEL = "Index-Translate-35B-A3B"
+DEFAULT_FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 
 # 与官方 call_api.py 保持一致的语言代码 → 中文名
 LANG_NAMES = {
@@ -76,6 +84,14 @@ def build_prompt(text: str, target: str) -> str:
     )
 
 
+def build_json_prompt(payload: dict, target: str) -> str:
+    return (
+        f"请把下面 JSON 里每个 value 翻译为{lang_name(target)}，key 保持不变，"
+        f"只输出 JSON，不要有任何解释。\n\n"
+        + json.dumps(payload, ensure_ascii=False)
+    )
+
+
 def build_image_prompt(target: str, hint: str = "") -> str:
     base = f"请将图片中的文本翻译为{lang_name(target)}，直接输出翻译结果，不要进行任何解释。"
     if hint.strip():
@@ -125,9 +141,11 @@ class IndexTranslatePlugin(Star):
     async def initialize(self):
         logger.info(
             f"[IndexTranslate] 已加载，模型 {self.config.get('model') or DEFAULT_MODEL}，"
-            f"默认目标语言 {self.config.get('target_lang') or 'en'}"
+            f"默认目标语言 {self.config.get('target_lang') or 'en'}，"
+            f"图片回填 {'开' if self.config.get('image_render') else '关'}"
         )
 
+    # ---------------- 消息入口 ----------------
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         raw = (event.message_str or "").strip()
@@ -172,6 +190,20 @@ class IndexTranslatePlugin(Star):
             return
 
         event.stop_event()
+
+        # 图片 + 回填开关 + OCR 已就绪 → 输出译好的图
+        if images and self.config.get("image_render") and self._ocr_ready():
+            try:
+                translated_text, out_image = await self._translate_image_render(images[0], target, text)
+            except Exception as e:
+                logger.error(f"[IndexTranslate] 图片回填失败，退回文字输出: {e}")
+                translated_text, out_image = None, None
+            if out_image:
+                if self.config.get("show_usage") and translated_text:
+                    yield event.plain_result(translated_text)
+                yield event.image_result(out_image)
+                return
+
         try:
             result = await self._translate(text, target, images[0] if images else None)
         except Exception as e:
@@ -184,6 +216,7 @@ class IndexTranslatePlugin(Star):
             return
         yield event.plain_result(result)
 
+    # ---------------- 纯文本 / 多模态 ----------------
     async def _translate(self, text: str, target: str, image_path: str | None) -> str:
         base = str(self.config.get("api_base") or DEFAULT_API_BASE).rstrip("/")
         model = str(self.config.get("model") or DEFAULT_MODEL)
@@ -227,3 +260,211 @@ class IndexTranslatePlugin(Star):
         if not choices:
             raise RuntimeError(f"返回里没有 choices：{str(data)[:160]}")
         return strip_think(choices[0].get("message", {}).get("content") or "")
+
+    # ---------------- 图片回填 ----------------
+    async def _translate_image_render(
+        self, image_path: str, target: str, hint: str
+    ) -> tuple[str | None, str | None]:
+        blocks = await self._ocr(image_path)
+        if not blocks:
+            return None, None
+        texts = await self._translate_batch([b["text"] for b in blocks], target)
+        out_image = await asyncio.to_thread(self._render_image, image_path, blocks, texts)
+        return "\n".join(t for t in texts if t), out_image
+
+    def _ocr_ready(self) -> bool:
+        """判一下当前配置下的 OCR 是不是可用。"""
+        provider = str(self.config.get("ocr_provider") or "cnocr").lower().strip()
+        if provider in ("glm", "bigmodel", "zhipu"):
+            return bool(str(self.config.get("ocr_api_key") or "").strip())
+        return bool(str(self.config.get("ocr_api_base") or "").strip())
+
+    async def _ocr(self, image_path: str) -> list[dict]:
+        provider = str(self.config.get("ocr_provider") or "cnocr").lower().strip()
+        timeout = int(self.config.get("ocr_timeout") or 60)
+        raw = Path(image_path).read_bytes()
+        filename = Path(image_path).name or "image.png"
+
+        if provider in ("glm", "bigmodel", "zhipu"):
+            # 智谱 GLM-OCR：POST /api/paas/v4/layout_parsing，Authorization 直接塞 key
+            base = str(
+                self.config.get("ocr_api_base") or "https://open.bigmodel.cn/api/paas/v4"
+            ).strip().rstrip("/")
+            key = str(self.config.get("ocr_api_key") or "").strip()
+            if not key:
+                raise RuntimeError("选了 GLM-OCR，但没填 ocr_api_key")
+            async with httpx.AsyncClient(timeout=timeout, trust_env=True) as client:
+                r = await client.post(
+                    f"{base}/layout_parsing",
+                    headers={"Authorization": key, "Content-Type": "application/json"},
+                    json={"model": "glm-ocr", "file": to_data_url(image_path)},
+                )
+            if r.status_code != 200:
+                raise RuntimeError(f"GLM-OCR HTTP {r.status_code}：{r.text[:200]}")
+        else:
+            base = str(self.config.get("ocr_api_base") or "").strip().rstrip("/")
+            path = str(self.config.get("ocr_api_path") or "/ocr").strip()
+            if not path.startswith("/"):
+                path = "/" + path
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+                r = await client.post(
+                    f"{base}{path}",
+                    files={"image": (filename, raw, "application/octet-stream")},
+                )
+            if r.status_code != 200:
+                raise RuntimeError(f"OCR HTTP {r.status_code}：{r.text[:200]}")
+
+        blocks = self._collect_blocks(r.json())
+        if not blocks:
+            logger.warning(f"[IndexTranslate] OCR 没解析出文字块，原始返回片段：{r.text[:300]}")
+            return []
+        blocks.sort(key=lambda b: (round(b["box"][1] / 10), b["box"][0]))
+        return blocks
+
+    @classmethod
+    def _collect_blocks(cls, obj, out: list | None = None) -> list[dict]:
+        """两种 OCR 返回结构差挺多，索性递归找「有文本 + 有框」的节点。"""
+        if out is None:
+            out = []
+        if isinstance(obj, dict):
+            text = obj.get("text") or obj.get("content")
+            box = (
+                obj.get("position")
+                or obj.get("bbox_2d")
+                or obj.get("bbox")
+                or obj.get("box")
+            )
+            if isinstance(text, str) and text.strip() and box:
+                rect = cls._to_box(box)
+                if rect:
+                    out.append({"text": text.strip(), "box": rect})
+            for v in obj.values():
+                cls._collect_blocks(v, out)
+        elif isinstance(obj, list):
+            for v in obj:
+                cls._collect_blocks(v, out)
+        return out
+
+    @staticmethod
+    def _to_box(box) -> tuple | None:
+        nums: list[float] = []
+        for item in box if isinstance(box, (list, tuple)) else []:
+            if isinstance(item, (list, tuple)):
+                if len(item) >= 2:
+                    nums.extend([float(item[0]), float(item[1])])
+            elif isinstance(item, (int, float)):
+                nums.append(float(item))
+        if len(nums) < 4:
+            return None
+        xs, ys = nums[0::2], nums[1::2]
+        return (min(xs), min(ys), max(xs), max(ys))
+
+    async def _translate_batch(self, texts: list[str], target: str) -> list[str]:
+        base = str(self.config.get("api_base") or DEFAULT_API_BASE).rstrip("/")
+        model = str(self.config.get("model") or DEFAULT_MODEL)
+        max_tokens = max(int(self.config.get("max_tokens") or 1024), 1024)
+        timeout = int(self.config.get("timeout") or 90)
+
+        if len(texts) == 1:
+            return [await self._post(base, model, build_prompt(texts[0], target), max_tokens, timeout)]
+
+        payload_in = {str(i + 1): t for i, t in enumerate(texts)}
+        raw = await self._post(base, model, build_json_prompt(payload_in, target), max_tokens, timeout)
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("```", 2)[-1] if cleaned.count("```") >= 2 else cleaned.strip("`")
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        parsed: dict = {}
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(cleaned[start:end + 1])
+            except Exception:
+                parsed = {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+
+        out: list[str] = []
+        for i, original in enumerate(texts):
+            val = parsed.get(str(i + 1))
+            out.append(str(val).strip() if val else "")
+        # 有漏的直接逐块补翻，宁可慢也不能漏
+        for i, val in enumerate(out):
+            if not val:
+                out[i] = await self._post(base, model, build_prompt(texts[i], target), max_tokens, timeout)
+        return out
+
+    def _render_image(self, image_path: str, blocks: list[dict], texts: list[str]) -> str:
+        from PIL import Image, ImageDraw
+
+        font_path = str(self.config.get("render_font") or DEFAULT_FONT)
+        img = Image.open(image_path).convert("RGB")
+        draw = ImageDraw.Draw(img)
+        width, height = img.size
+
+        for block, new_text in zip(blocks, texts):
+            if not new_text.strip():
+                continue
+            x0, y0, x1, y1 = [int(v) for v in block["box"]]
+            x0, y0 = max(0, x0), max(0, y0)
+            x1, y1 = min(width, x1), min(height, y1)
+            if x1 - x0 < 4 or y1 - y0 < 4:
+                continue
+            bg = self._sample_bg(img, (x0, y0, x1, y1))
+            draw.rectangle([x0, y0, x1, y1], fill=bg)
+            lum = 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2]
+            color = (17, 17, 17) if lum > 140 else (245, 245, 245)
+            self._draw_fit(draw, new_text, (x0, y0, x1, y1), font_path, color)
+
+        out_path = str(Path(image_path).with_name(Path(image_path).stem + "_translated.png"))
+        img.save(out_path, "PNG")
+        return out_path
+
+    @staticmethod
+    def _sample_bg(img, box):
+        """在框外一圈采样，取中位亮度那个颜色当背景，擦除后不至于突兀。"""
+        x0, y0, x1, y1 = box
+        pts = []
+        step_x = max(1, (x1 - x0) // 12)
+        step_y = max(1, (y1 - y0) // 12)
+        for x in range(x0, x1, step_x):
+            for y in (max(0, y0 - 2), min(img.size[1] - 1, y1 + 2)):
+                pts.append(img.getpixel((x, y)))
+        for y in range(y0, y1, step_y):
+            for x in (max(0, x0 - 2), min(img.size[0] - 1, x1 + 2)):
+                pts.append(img.getpixel((x, y)))
+        if not pts:
+            return (255, 255, 255)
+        pts.sort(key=lambda c: 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2])
+        return pts[len(pts) // 2]
+
+    @staticmethod
+    def _draw_fit(draw, text: str, box, font_path: str, color):
+        """在框内自动折行 + 缩字号，塞不进去就继续缩。"""
+        from PIL import ImageFont
+
+        x0, y0, x1, y1 = box
+        bw, bh = x1 - x0, y1 - y0
+        size = max(8, int(bh * 0.92))
+        while size >= 8:
+            try:
+                font = ImageFont.truetype(font_path, size)
+            except Exception:
+                return
+            lines, cur = [], ""
+            for ch in text:
+                if draw.textlength(cur + ch, font=font) <= bw - 2:
+                    cur += ch
+                else:
+                    if cur:
+                        lines.append(cur)
+                    cur = ch
+            if cur:
+                lines.append(cur)
+            line_h = size + 3
+            if len(lines) * line_h <= bh + 2:
+                y = y0 + max(0, (bh - len(lines) * line_h) // 2)
+                for line in lines:
+                    draw.text((x0 + 1, y), line, font=font, fill=color)
+                    y += line_h
+                return
+            size = int(size * 0.85)
