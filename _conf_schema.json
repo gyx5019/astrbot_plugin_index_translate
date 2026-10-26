@@ -46,5 +46,44 @@
     "type": "bool",
     "description": "翻译结果末尾附上耗时和 token 用量",
     "default": false
+  },
+  "image_render": {
+    "type": "bool",
+    "description": "图片翻译输出「回填译文的图」（需要填 OCR 接口地址）",
+    "default": false,
+    "hint": "关闭时图片翻译只输出文字；开启且 ocr_api_base 可用时，会调用 OCR 拿到文字位置，把原文擦掉写上译文，发回一张译好的图"
+  },
+  "ocr_provider": {
+    "type": "string",
+    "description": "OCR 用哪家",
+    "default": "cnocr",
+    "options": ["cnocr", "glm"],
+    "hint": "cnocr：自己起 CnOCR 的 FastAPI（cnocr serve -p 8501）；glm：智谱 GLM-OCR，走 https://open.bigmodel.cn/api/paas/v4/layout_parsing，需要 API Key"
+  },
+  "ocr_api_base": {
+    "type": "string",
+    "description": "OCR 服务地址",
+    "default": "",
+    "hint": "cnocr 例：http://127.0.0.1:8501；glm 留空则用 https://open.bigmodel.cn/api/paas/v4。留空且选 cnocr 时图片翻译走文字输出"
+  },
+  "ocr_api_key": {
+    "type": "string",
+    "description": "GLM-OCR 的 API Key（选 glm 时必填）",
+    "default": ""
+  },
+  "ocr_api_path": {
+    "type": "string",
+    "description": "cnocr 的接口路径",
+    "default": "/ocr"
+  },
+  "ocr_timeout": {
+    "type": "int",
+    "description": "OCR 请求超时（秒）",
+    "default": 60
+  },
+  "render_font": {
+    "type": "string",
+    "description": "回填时用的字体文件",
+    "default": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
   }
 }
