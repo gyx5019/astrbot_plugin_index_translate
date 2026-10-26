@@ -283,11 +283,6 @@ class IndexTranslatePlugin(Star):
         provider = str(self.config.get("ocr_provider") or "cnocr").lower().strip()
         if provider in ("glm", "bigmodel", "zhipu"):
             return bool(str(self.config.get("ocr_api_key") or "").strip())
-        if provider in ("deepseek", "deepseek-ocr", "ds"):
-            base = str(self.config.get("ocr_api_base") or "").strip()
-            if base.startswith(("http://127.", "http://localhost", "http://192.168.", "http://10.")):
-                return True
-            return bool(str(self.config.get("ocr_api_key") or "").strip())
         return bool(str(self.config.get("ocr_api_base") or "").strip())
 
     async def _ocr(self, image_path: str) -> list[dict]:
@@ -312,48 +307,6 @@ class IndexTranslatePlugin(Star):
                 )
             if r.status_code != 200:
                 raise RuntimeError(f"GLM-OCR HTTP {r.status_code}：{r.text[:200]}")
-        elif provider in ("deepseek", "deepseek-ocr", "ds"):
-            # DeepSeek：官方接口或自建 vLLM（OpenAI 兼容）
-            base = str(
-                self.config.get("ocr_api_base") or "https://api.deepseek.com"
-            ).strip().rstrip("/")
-            model = str(self.config.get("ocr_model") or "deepseek-ai/DeepSeek-OCR")
-            prompt = str(self.config.get("ocr_prompt") or "<|grounding|>OCR this image.")
-            key = str(self.config.get("ocr_api_key") or "").strip()
-            headers = {"Content-Type": "application/json"}
-            if key:
-                headers["Authorization"] = f"Bearer {key}"
-            is_remote = not base.startswith(
-                ("http://127.", "http://localhost", "http://192.168.", "http://10.", "http://172.")
-            )
-            async with httpx.AsyncClient(timeout=timeout, trust_env=is_remote) as client:
-                r = await client.post(
-                    f"{base}/chat/completions",
-                    headers=headers,
-                    json={
-                        "model": model,
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "image_url", "image_url": {"url": to_data_url(image_path)}},
-                                    {"type": "text", "text": prompt},
-                                ],
-                            }
-                        ],
-                        "temperature": 0.0,
-                        "max_tokens": 4096,
-                    },
-                )
-            if r.status_code != 200:
-                raise RuntimeError(f"DeepSeek-OCR HTTP {r.status_code}：{r.text[:200]}")
-            out_text = ((r.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-            blocks = self._normalize_boxes(self._parse_deepseek_det(out_text), image_path)
-            plain = re.sub(r"<\|[^|]+\|>", "", out_text).strip()
-            if not blocks:
-                logger.warning(f"[IndexTranslate] DeepSeek-OCR 没解析出坐标，原始片段：{out_text[:300]}")
-            blocks.sort(key=lambda b: (round(b["box"][1] / 10), b["box"][0]))
-            return blocks, plain
         else:
             base = str(self.config.get("ocr_api_base") or "").strip().rstrip("/")
             path = str(self.config.get("ocr_api_path") or "/ocr").strip()
@@ -421,22 +374,6 @@ class IndexTranslatePlugin(Star):
                 b["box"] = (x0 * img_w, y0 * img_h, x1 * img_w, y1 * img_h)
         return blocks
 
-    @staticmethod
-    def _parse_deepseek_det(text: str) -> list[dict]:
-        """DeepSeek-OCR grounding 输出：<|ref|>文字<|/ref|><|det|>[[x1,y1,x2,y2]]<|/det|>"""
-        out: list[dict] = []
-        pattern = re.compile(
-            r"<\|ref\|>(.*?)<\|/ref\|>\s*<\|det\|>\s*(?:\[\[)?([\-\d.,\s]+?)(?:\]\])?\s*<\|/det\|>",
-            re.S,
-        )
-        for m in pattern.finditer(text or ""):
-            label = (m.group(1) or "").strip()
-            nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", m.group(2) or "")]
-            if not label or len(nums) < 4:
-                continue
-            xs, ys = nums[0::2], nums[1::2]
-            out.append({"text": label, "box": (min(xs), min(ys), max(xs), max(ys))})
-        return out
 
     @classmethod
     def _collect_blocks(cls, obj, out: list | None = None) -> list[dict]:
