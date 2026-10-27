@@ -14,31 +14,83 @@ DEFAULT_FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 
 # 与官方 call_api.py 保持一致的语言代码 → 中文名
 LANG_NAMES = {
-    "en": "英语", "zh": "中文", "de": "德语", "fr": "法语", "es": "西班牙语",
-    "ja": "日语", "ko": "韩语", "pt": "葡萄牙语", "ru": "俄语", "ar": "阿拉伯语",
-    "it": "意大利语", "nl": "荷兰语", "pl": "波兰语", "ro": "罗马尼亚语",
-    "sv": "瑞典语", "tr": "土耳其语", "hi": "印地语", "vi": "越南语",
-    "th": "泰语", "id": "印尼语", "ms": "马来语", "fil": "菲律宾语",
-    "ukr_cyrl": "乌克兰语", "fas_arab": "波斯语", "ces_latn": "捷克语",
-    "ell_grek": "希腊语", "dan_latn": "丹麦语", "hun_latn": "匈牙利语",
-    "fin_latn": "芬兰语", "nob_latn": "书面挪威语", "slk_latn": "斯洛伐克语",
+    "en": "英语",
+    "zh": "中文",
+    "de": "德语",
+    "fr": "法语",
+    "es": "西班牙语",
+    "ja": "日语",
+    "ko": "韩语",
+    "pt": "葡萄牙语",
+    "ru": "俄语",
+    "ar": "阿拉伯语",
+    "it": "意大利语",
+    "nl": "荷兰语",
+    "pl": "波兰语",
+    "ro": "罗马尼亚语",
+    "sv": "瑞典语",
+    "tr": "土耳其语",
+    "hi": "印地语",
+    "vi": "越南语",
+    "th": "泰语",
+    "id": "印尼语",
+    "ms": "马来语",
+    "fil": "菲律宾语",
+    "ukr_cyrl": "乌克兰语",
+    "fas_arab": "波斯语",
+    "ces_latn": "捷克语",
+    "ell_grek": "希腊语",
+    "dan_latn": "丹麦语",
+    "hun_latn": "匈牙利语",
+    "fin_latn": "芬兰语",
+    "nob_latn": "书面挪威语",
+    "slk_latn": "斯洛伐克语",
     "bul_cyrl": "保加利亚语",
 }
 
 # 指令里能直接写的语言别名
 LANG_ALIAS = {
-    "英语": "en", "英文": "en", "中文": "zh", "汉语": "zh", "日文": "ja", "日语": "ja",
-    "韩语": "ko", "韩文": "ko", "法语": "fr", "德语": "de", "俄语": "ru",
-    "西班牙语": "es", "葡萄牙语": "pt", "意大利语": "it", "阿拉伯语": "ar",
-    "印地语": "hi", "越南语": "vi", "泰语": "th", "印尼语": "id", "马来语": "ms",
-    "菲律宾语": "fil", "土耳其语": "tr", "荷兰语": "nl", "波兰语": "pl",
-    "瑞典语": "sv", "罗马尼亚语": "ro", "乌克兰语": "ukr_cyrl", "波斯语": "fas_arab",
-    "捷克语": "ces_latn", "希腊语": "ell_grek", "丹麦语": "dan_latn",
-    "匈牙利语": "hun_latn", "芬兰语": "fin_latn", "挪威语": "nob_latn",
-    "斯洛伐克语": "slk_latn", "保加利亚语": "bul_cyrl",
+    "英语": "en",
+    "英文": "en",
+    "中文": "zh",
+    "汉语": "zh",
+    "日文": "ja",
+    "日语": "ja",
+    "韩语": "ko",
+    "韩文": "ko",
+    "法语": "fr",
+    "德语": "de",
+    "俄语": "ru",
+    "西班牙语": "es",
+    "葡萄牙语": "pt",
+    "意大利语": "it",
+    "阿拉伯语": "ar",
+    "印地语": "hi",
+    "越南语": "vi",
+    "泰语": "th",
+    "印尼语": "id",
+    "马来语": "ms",
+    "菲律宾语": "fil",
+    "土耳其语": "tr",
+    "荷兰语": "nl",
+    "波兰语": "pl",
+    "瑞典语": "sv",
+    "罗马尼亚语": "ro",
+    "乌克兰语": "ukr_cyrl",
+    "波斯语": "fas_arab",
+    "捷克语": "ces_latn",
+    "希腊语": "ell_grek",
+    "丹麦语": "dan_latn",
+    "匈牙利语": "hun_latn",
+    "芬兰语": "fin_latn",
+    "挪威语": "nob_latn",
+    "斯洛伐克语": "slk_latn",
+    "保加利亚语": "bul_cyrl",
 }
 
-TRIGGER = re.compile(r"^\s*(?:翻译成|翻译到|翻译为|翻译|译成|译|tr)\s*(.*)$", re.I | re.S)
+TRIGGER = re.compile(
+    r"^\s*(?:翻译成|翻译到|翻译为|翻译|译成|译|tr)\s*(.*)$", re.I | re.S
+)
 TARGET_PREFIX = re.compile(
     r"^(?:成|到|为)?\s*([\u4e00-\u9fa5]{1,6}|[A-Za-z_]{2,10})\s*[:：,，]?\s*(.*)$", re.S
 )
@@ -66,8 +118,7 @@ def build_prompt(text: str, target: str) -> str:
 def build_json_prompt(payload: dict, target: str) -> str:
     return (
         f"请把下面 JSON 里每个 value 翻译为{lang_name(target)}，key 保持不变，"
-        f"只输出 JSON，不要有任何解释。\n\n"
-        + json.dumps(payload, ensure_ascii=False)
+        f"只输出 JSON，不要有任何解释。\n\n" + json.dumps(payload, ensure_ascii=False)
     )
 
 
@@ -83,8 +134,12 @@ def to_data_url(image_path: str) -> str:
     mime = mimetypes.guess_type(str(p))[0]
     if not mime:
         mime = {
-            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-            ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+            ".bmp": "image/bmp",
         }.get(p.suffix.lower(), "image/png")
     return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
 
