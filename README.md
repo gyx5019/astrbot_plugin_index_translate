@@ -125,9 +125,7 @@ astrbot_plugin_index_translate/
 ├── main.py             入口：Star 类、消息路由、翻译主体
 ├── ocr.py              OCR 与图片回填（cnocr / glm），mixin
 ├── voice.py            语音、音频（ASR → 翻译 → TTS），mixin
-├── data/               运行数据
-│   ├── plugin.log      插件日志（超 2MB 自动轮转为 plugin.log.1）
-│   └── *.bak.*         改动前的备份
+├── helpers.py          公共常量与纯函数（语言表、prompt、图片转 data URL、分段）
 ├── _conf_schema.json   配置定义
 ├── metadata.yaml       插件元信息
 ├── requirements.txt    依赖
@@ -135,6 +133,18 @@ astrbot_plugin_index_translate/
 
 ```
 OCR 和语音用 mixin 拆出去，方法仍挂在同一个 `self` 上，所以 `self._ocr()`、`self._voice_flow()` 这类调用不用改。
+
+## 日志
+
+运行日志写到 AstrBot 规范位置，不落插件自身目录：
+
+```
+data/plugin_data/astrbot_plugin_index_translate/plugin.log
+```
+
+- 超过 2MB 自动轮转为 `plugin.log.1`
+- **只记长度、状态、结果和错误码，不记录用户消息、ASR 识别结果、译文等原文内容**
+- 想看的更细可以开 AstrBot 自身的日志文件
 
 ## 原理
 
