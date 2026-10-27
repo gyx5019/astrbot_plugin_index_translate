@@ -6,9 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
-import re
 from pathlib import Path
 
 import httpx
@@ -19,11 +17,8 @@ from .helpers import (
     DEFAULT_API_BASE,
     DEFAULT_FONT,
     DEFAULT_MODEL,
-    build_image_prompt,
     build_json_prompt,
     build_prompt,
-    lang_name,
-    split_text,
     to_data_url,
 )
 
@@ -42,7 +37,9 @@ class OcrMixin:
             return None, None
         texts = await self._translate_batch([b["text"] for b in blocks], target)
         self._plog(f"OCR 拿到 {len(blocks)} 块，已翻译，开始重绘")
-        out_image = await asyncio.to_thread(self._render_image, image_path, blocks, texts)
+        out_image = await asyncio.to_thread(
+            self._render_image, image_path, blocks, texts
+        )
         self._plog(f"重绘完成：{Path(out_image).name}")
         return "\n".join(t for t in texts if t), out_image
 
@@ -61,9 +58,14 @@ class OcrMixin:
 
         if provider in ("glm", "bigmodel", "zhipu"):
             # 智谱 GLM-OCR：POST /api/paas/v4/layout_parsing，Authorization 直接塞 key
-            base = str(
-                self.config.get("ocr_api_base") or "https://open.bigmodel.cn/api/paas/v4"
-            ).strip().rstrip("/")
+            base = (
+                str(
+                    self.config.get("ocr_api_base")
+                    or "https://open.bigmodel.cn/api/paas/v4"
+                )
+                .strip()
+                .rstrip("/")
+            )
             key = str(self.config.get("ocr_api_key") or "").strip()
             if not key:
                 raise RuntimeError("选了 GLM-OCR，但没填 ocr_api_key")
@@ -145,7 +147,6 @@ class OcrMixin:
                 b["box"] = (x0 * img_w, y0 * img_h, x1 * img_w, y1 * img_h)
         return blocks
 
-
     @classmethod
     def _collect_blocks(cls, obj, out: list | None = None) -> list[dict]:
         """两种 OCR 返回结构差挺多，索性递归找「有文本 + 有框」的节点。"""
@@ -191,18 +192,28 @@ class OcrMixin:
         timeout = int(self.config.get("timeout") or 90)
 
         if len(texts) == 1:
-            return [await self._post(base, model, build_prompt(texts[0], target), max_tokens, timeout)]
+            return [
+                await self._post(
+                    base, model, build_prompt(texts[0], target), max_tokens, timeout
+                )
+            ]
 
         payload_in = {str(i + 1): t for i, t in enumerate(texts)}
-        raw = await self._post(base, model, build_json_prompt(payload_in, target), max_tokens, timeout)
+        raw = await self._post(
+            base, model, build_json_prompt(payload_in, target), max_tokens, timeout
+        )
         cleaned = raw.strip()
         if cleaned.startswith("```"):
-            cleaned = cleaned.split("```", 2)[-1] if cleaned.count("```") >= 2 else cleaned.strip("`")
+            cleaned = (
+                cleaned.split("```", 2)[-1]
+                if cleaned.count("```") >= 2
+                else cleaned.strip("`")
+            )
         start, end = cleaned.find("{"), cleaned.rfind("}")
         parsed: dict = {}
         if start >= 0 and end > start:
             try:
-                parsed = json.loads(cleaned[start:end + 1])
+                parsed = json.loads(cleaned[start : end + 1])
             except Exception:
                 parsed = {}
         if not isinstance(parsed, dict):
@@ -215,10 +226,14 @@ class OcrMixin:
         # 有漏的直接逐块补翻，宁可慢也不能漏
         for i, val in enumerate(out):
             if not val:
-                out[i] = await self._post(base, model, build_prompt(texts[i], target), max_tokens, timeout)
+                out[i] = await self._post(
+                    base, model, build_prompt(texts[i], target), max_tokens, timeout
+                )
         return out
 
-    def _render_image(self, image_path: str, blocks: list[dict], texts: list[str]) -> str:
+    def _render_image(
+        self, image_path: str, blocks: list[dict], texts: list[str]
+    ) -> str:
         from PIL import Image, ImageDraw
 
         font_path = str(self.config.get("render_font") or DEFAULT_FONT)
@@ -240,7 +255,9 @@ class OcrMixin:
             color = (17, 17, 17) if lum > 140 else (245, 245, 245)
             self._draw_fit(draw, new_text, (x0, y0, x1, y1), font_path, color)
 
-        out_path = str(Path(image_path).with_name(Path(image_path).stem + "_translated.png"))
+        out_path = str(
+            Path(image_path).with_name(Path(image_path).stem + "_translated.png")
+        )
         img.save(out_path, "PNG")
         return out_path
 
