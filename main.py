@@ -147,23 +147,9 @@ class IndexTranslatePlugin(OcrMixin, VoiceMixin, Star):
         text = payload or quoted_text
         if not text and not images and not voices:
             event.stop_event()
-            dbg = ""
-            try:
-                comps = [type(c).__name__ for c in event.message_obj.message]
-                chain = []
-                for c in event.message_obj.message:
-                    if isinstance(c, Reply):
-                        chain = [type(s).__name__ for s in (getattr(c, "chain", None) or [])]
-                        break
-                dbg = (
-                    f"\n（调试：消息组件={comps}｜引用链={chain}"
-                    f"｜取自消息的语音={len(voices)}）"
-                )
-            except Exception:
-                dbg = ""
             yield event.plain_result(
                 "要翻什么？发「翻译 内容」，或者引用一条消息/图片再发「翻译」。\n"
-                "也能指定语言：「翻译成日语 xxx」" + dbg
+                "也能指定语言：「翻译成日语 xxx」"
             )
             return
 
