@@ -15,6 +15,17 @@ import httpx
 
 from astrbot.api import logger
 
+from .helpers import (
+    DEFAULT_API_BASE,
+    DEFAULT_MODEL,
+    build_image_prompt,
+    build_json_prompt,
+    build_prompt,
+    lang_name,
+    split_text,
+    to_data_url,
+)
+
 
 class OcrMixin:
     # ---------------- 图片回填 ----------------
