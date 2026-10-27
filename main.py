@@ -15,11 +15,6 @@ OpenAI 兼容格式、免鉴权、无需 API Key。
 
 from __future__ import annotations
 
-import asyncio
-import base64
-import json
-import mimetypes
-import re
 import time
 from pathlib import Path
 
@@ -27,28 +22,23 @@ import httpx
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import File, Image, Plain, Record, Reply
+from astrbot.api.message_components import Image, Record, Reply
 from astrbot.api.star import Context, Star
-
-from .ocr import OcrMixin
-from .voice import AUDIO_EXTS, AudioTooLong, VoiceMixin
 
 from .helpers import (
     DEFAULT_API_BASE,
-    DEFAULT_FONT,
     DEFAULT_MODEL,
     LANG_ALIAS,
-    LANG_NAMES,
     TARGET_PREFIX,
     TRIGGER,
     build_image_prompt,
-    build_json_prompt,
     build_prompt,
-    lang_name,
     split_text,
     strip_think,
     to_data_url,
 )
+from .ocr import OcrMixin
+from .voice import VoiceMixin
 
 
 class IndexTranslatePlugin(OcrMixin, VoiceMixin, Star):
@@ -85,6 +75,11 @@ class IndexTranslatePlugin(OcrMixin, VoiceMixin, Star):
                 f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
         except Exception:
             pass
+        # 同时走 AstrBot 自己的 logger，方便在面板/日志里直接看
+        try:
+            logger.info(f"[IndexTranslate] {msg}")
+        except Exception:
+            pass
 
     # ---------------- 消息入口 ----------------
     @filter.event_message_type(filter.EventMessageType.ALL)
@@ -113,7 +108,7 @@ class IndexTranslatePlugin(OcrMixin, VoiceMixin, Star):
         for comp in event.message_obj.message:
             if isinstance(comp, Reply):
                 quoted_text = (getattr(comp, "message_str", "") or "").strip()
-                for sub in (getattr(comp, "chain", None) or []):
+                for sub in getattr(comp, "chain", None) or []:
                     if isinstance(sub, Image):
                         try:
                             images.append(await sub.convert_to_file_path())
@@ -164,7 +159,9 @@ class IndexTranslatePlugin(OcrMixin, VoiceMixin, Star):
         # 图片 + 回填开关 + OCR 已就绪 → 输出译好的图
         if images and self.config.get("image_render") and self._ocr_ready():
             try:
-                translated_text, out_image = await self._translate_image_render(images[0], target, text)
+                translated_text, out_image = await self._translate_image_render(
+                    images[0], target, text
+                )
             except Exception as e:
                 logger.error(f"[IndexTranslate] 图片回填失败，退回文字输出: {e}")
                 translated_text, out_image = None, None
@@ -185,7 +182,9 @@ class IndexTranslatePlugin(OcrMixin, VoiceMixin, Star):
             return
 
         if not result.strip():
-            yield event.plain_result("模型没吐译文出来，可能内容太长或被拦了，换个短点的试试")
+            yield event.plain_result(
+                "模型没吐译文出来，可能内容太长或被拦了，换个短点的试试"
+            )
             return
         yield event.plain_result(result)
 
@@ -207,10 +206,16 @@ class IndexTranslatePlugin(OcrMixin, VoiceMixin, Star):
         pieces = split_text(text, chunk)
         outs = []
         for piece in pieces:
-            outs.append(await self._post(base, model, build_prompt(piece, target), max_tokens, timeout))
+            outs.append(
+                await self._post(
+                    base, model, build_prompt(piece, target), max_tokens, timeout
+                )
+            )
         return "\n".join(x for x in outs if x.strip())
 
-    async def _post(self, base: str, model: str, content, max_tokens: int, timeout: int) -> str:
+    async def _post(
+        self, base: str, model: str, content, max_tokens: int, timeout: int
+    ) -> str:
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": content}],
@@ -234,4 +239,3 @@ class IndexTranslatePlugin(OcrMixin, VoiceMixin, Star):
         if not choices:
             raise RuntimeError(f"返回里没有 choices：{str(data)[:160]}")
         return strip_think(choices[0].get("message", {}).get("content") or "")
-
