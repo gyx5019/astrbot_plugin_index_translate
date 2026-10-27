@@ -17,6 +17,7 @@ from astrbot.api import logger
 
 from .helpers import (
     DEFAULT_API_BASE,
+    DEFAULT_FONT,
     DEFAULT_MODEL,
     build_image_prompt,
     build_json_prompt,
@@ -32,6 +33,7 @@ class OcrMixin:
     async def _translate_image_render(
         self, image_path: str, target: str, hint: str
     ) -> tuple[str | None, str | None]:
+        self._plog(f"回填开始 provider={self.config.get('ocr_provider')}")
         blocks, plain = await self._ocr(image_path)
         if not blocks:
             # 没坐标就只剩文字了：直接拿 OCR 文本走文本翻译，别硬塞回图里
@@ -39,7 +41,9 @@ class OcrMixin:
                 return await self._translate(plain, target, None), None
             return None, None
         texts = await self._translate_batch([b["text"] for b in blocks], target)
+        self._plog(f"OCR 拿到 {len(blocks)} 块，已翻译，开始重绘")
         out_image = await asyncio.to_thread(self._render_image, image_path, blocks, texts)
+        self._plog(f"重绘完成：{Path(out_image).name}")
         return "\n".join(t for t in texts if t), out_image
 
     def _ocr_ready(self) -> bool:
@@ -70,6 +74,7 @@ class OcrMixin:
                     json={"model": "glm-ocr", "file": to_data_url(image_path)},
                 )
             if r.status_code != 200:
+                self._plog(f"GLM-OCR 失败 HTTP {r.status_code}")
                 raise RuntimeError(f"GLM-OCR HTTP {r.status_code}：{r.text[:200]}")
         else:
             base = str(self.config.get("ocr_api_base") or "").strip().rstrip("/")
@@ -82,6 +87,7 @@ class OcrMixin:
                     files={"image": (filename, raw, "application/octet-stream")},
                 )
             if r.status_code != 200:
+                self._plog(f"cnocr 失败 HTTP {r.status_code}")
                 raise RuntimeError(f"OCR HTTP {r.status_code}：{r.text[:200]}")
 
         blocks = self._collect_blocks(r.json())
@@ -90,6 +96,7 @@ class OcrMixin:
             logger.warning(
                 f"[IndexTranslate] OCR 没解析出坐标，原始返回片段：{r.text[:300]}"
             )
+            self._plog(f"OCR 无坐标，返回长度 {len(r.text)}，按纯文本走")
             return [], plain
 
         # GLM 的 bbox_2d 是 0~1 的相对坐标，得按图片尺寸换算成像素
