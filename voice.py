@@ -225,15 +225,15 @@ class VoiceMixin:
                     insts = getattr(pm, "tts_provider_insts", None) or []
                     tts = insts[0] if insts else None
                 if not tts:
-                    note = "\n[调试] 没取到 TTS provider（已加载的 TTS 实例也是空的）"
+                    note = "\n（暂时没有可用的 TTS 模型，先发文字）"
                 else:
                     audio = await tts.get_audio(translated)
                     if not audio:
-                        note = "\n[调试] TTS 返回了空"
+                        note = "\n（TTS 没返回音频，先发文字）"
                     elif not Path(str(audio)).exists():
-                        note = f"\n[调试] TTS 给的路径不存在：{audio}"
+                        note = "\n（TTS 生成的音频找不到，先发文字）"
             except Exception as e:
-                note = f"\n[调试] TTS 出错：{type(e).__name__}: {e}"
+                note = "\n（TTS 出了点问题，先发文字）"
 
         # 有音频就只发语音；TTS 出岔子才退回文字，并把原因一起给出来
         if audio and Path(str(audio)).exists():
