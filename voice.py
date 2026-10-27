@@ -27,7 +27,7 @@ class VoiceMixin:
         for comp in event.message_obj.message:
             if isinstance(comp, Reply):
                 got = False
-                for sub in (getattr(comp, "chain", None) or []):
+                for sub in getattr(comp, "chain", None) or []:
                     if isinstance(sub, Record):
                         try:
                             out.append(await sub.convert_to_file_path())
@@ -44,7 +44,9 @@ class VoiceMixin:
                                 logger.warning(f"[IndexTranslate] 引用音频取不到: {e}")
                 if not got:
                     # 引用链里没有语音段，按消息 id 回捞一次
-                    ref = await self._fetch_quoted_voice(event, getattr(comp, "id", None))
+                    ref = await self._fetch_quoted_voice(
+                        event, getattr(comp, "id", None)
+                    )
                     if ref:
                         out.append(ref)
             elif isinstance(comp, Record):
@@ -62,7 +64,9 @@ class VoiceMixin:
                         logger.warning(f"[IndexTranslate] 音频文件取不到: {e}")
         return out
 
-    async def _fetch_quoted_voice(self, event: AstrMessageEvent, message_id) -> str | None:
+    async def _fetch_quoted_voice(
+        self, event: AstrMessageEvent, message_id
+    ) -> str | None:
         """引用消息里的语音经常不在 chain 里，调 get_msg 把它捞出来。"""
         if not message_id:
             return None
@@ -70,7 +74,9 @@ class VoiceMixin:
         api = getattr(bot, "api", None)
         call_action = getattr(api, "call_action", None)
         if not callable(call_action):
-            logger.warning("[IndexTranslate] 这个平台拿不到 call_action，无法回捞引用语音")
+            logger.warning(
+                "[IndexTranslate] 这个平台拿不到 call_action，无法回捞引用语音"
+            )
             return None
         try:
             ret = await call_action("get_msg", message_id=message_id)
@@ -90,7 +96,9 @@ class VoiceMixin:
                 payload = seg.get("data") or {}
                 ref = payload.get("url") or payload.get("file") or payload.get("path")
                 if ref:
-                    logger.info(f"[IndexTranslate] 从 get_msg 捞到引用语音：{str(ref)[:80]}")
+                    logger.info(
+                        f"[IndexTranslate] 从 get_msg 捞到引用语音：{str(ref)[:80]}"
+                    )
                     return str(ref)
         return None
 
@@ -99,8 +107,14 @@ class VoiceMixin:
         """用 ffprobe 读音频时长（秒），读不到就返回 None。"""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                "-of", "default=nw=1:nk=1", str(path),
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=nw=1:nk=1",
+                str(path),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -146,21 +160,33 @@ class VoiceMixin:
         if base and key:
             data = Path(audio_path).read_bytes()
             mime = {
-                ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4",
-                ".ogg": "audio/ogg", ".amr": "audio/amr", ".silk": "audio/silk",
+                ".wav": "audio/wav",
+                ".mp3": "audio/mpeg",
+                ".m4a": "audio/mp4",
+                ".ogg": "audio/ogg",
+                ".amr": "audio/amr",
+                ".silk": "audio/silk",
                 ".flac": "audio/flac",
             }.get(Path(audio_path).suffix.lower(), "audio/wav")
             data_uri = f"data:{mime};base64,{base64.b64encode(data).decode()}"
             async with httpx.AsyncClient(timeout=120, trust_env=True) as client:
                 r = await client.post(
                     f"{base}/chat/completions",
-                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    headers={
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                    },
                     json={
                         "model": model,
                         "messages": [
                             {
                                 "role": "user",
-                                "content": [{"type": "input_audio", "input_audio": {"data": data_uri}}],
+                                "content": [
+                                    {
+                                        "type": "input_audio",
+                                        "input_audio": {"data": data_uri},
+                                    }
+                                ],
                             }
                         ],
                         "stream": False,
@@ -169,12 +195,16 @@ class VoiceMixin:
                 )
             if r.status_code != 200:
                 raise RuntimeError(f"ASR HTTP {r.status_code}：{r.text[:200]}")
-            return ((r.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+            return ((r.json().get("choices") or [{}])[0].get("message") or {}).get(
+                "content"
+            ) or ""
 
         stt = None
         if event is not None:
             try:
-                stt = await self.context.get_using_stt_provider_async(event.unified_msg_origin)
+                stt = await self.context.get_using_stt_provider_async(
+                    event.unified_msg_origin
+                )
             except Exception as e:
                 logger.error(f"[IndexTranslate] 取 STT provider 失败: {e}")
                 stt = None
@@ -182,7 +212,9 @@ class VoiceMixin:
             return (await stt.get_text(audio_url=audio_path)) or ""
         return ""
 
-    async def _voice_flow(self, event: AstrMessageEvent, voices: list[str], target: str):
+    async def _voice_flow(
+        self, event: AstrMessageEvent, voices: list[str], target: str
+    ):
         try:
             heard = await self._asr(voices[0], event)
         except AudioTooLong as e:
@@ -193,7 +225,7 @@ class VoiceMixin:
             yield event.plain_result(f"语音转文字失败了：{e}")
             return
         heard = heard.strip()
-        self._plog(f"ASR 结果={heard[:80]!r}")
+        self._plog(f"ASR 命中 {len(heard)} 字")
         if not heard:
             yield event.plain_result("没听清，换一段试试")
             return
@@ -204,7 +236,7 @@ class VoiceMixin:
             logger.error(f"[IndexTranslate] 语音翻译失败: {e}")
             yield event.plain_result(f"翻不动了：{e}")
             return
-        self._plog(f"语音译文={translated[:80]!r} target={target}")
+        self._plog(f"译文 {len(translated)} 字 target={target}")
         if not translated.strip():
             yield event.plain_result("模型没吐译文出来，换个短点的试试")
             return
@@ -218,7 +250,9 @@ class VoiceMixin:
         note, audio = "", None
         if True:
             try:
-                tts = await self.context.get_using_tts_provider_async(event.unified_msg_origin)
+                tts = await self.context.get_using_tts_provider_async(
+                    event.unified_msg_origin
+                )
                 if not tts:
                     # 全局 TTS 开关关着时上面会直接返回 None，这里绕过开关，直接从已加载实例里挑
                     pm = getattr(self.context, "provider_manager", None)
@@ -232,14 +266,13 @@ class VoiceMixin:
                         note = "\n（TTS 没返回音频，先发文字）"
                     elif not Path(str(audio)).exists():
                         note = "\n（TTS 生成的音频找不到，先发文字）"
-            except Exception as e:
+            except Exception:
                 note = "\n（TTS 出了点问题，先发文字）"
 
         # 有音频就只发语音；TTS 出岔子才退回文字，并把原因一起给出来
         if audio and Path(str(audio)).exists():
-            self._plog(f"发送：仅语音 {audio}")
+            self._plog("发送：仅语音")
             yield event.chain_result([Record(file=audio)])
         else:
-            self._plog(f"发送：文字（无语音）note={note!r}")
+            self._plog("发送：仅文字（附原因）")
             yield event.plain_result(translated + note)
-
